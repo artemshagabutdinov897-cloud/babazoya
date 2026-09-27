@@ -168,9 +168,13 @@ def load_book():
 BOOK = {"recipes": []}
 IDX = []
 
+STOP_W = {"что", "чего", "приг", "сдел", "можн", "есть", "реце", "хочу", "како", "как", "надо", "нужн", "мне", "меня",
+          "дома", "оста", "пожа", "подс", "посо", "бабу", "баба", "зоя", "прив", "здра", "спас", "будь", "свар",
+          "испе", "пожа", "блюд", "вкус", "прос", "быст", "очен", "може", "подс", "есть", "еще", "ещё", "так", "это"}
+
 def words(s):
     s = s.lower().replace("ё", "е")
-    return [w[:5] for w in re.findall(r"[а-яa-z]{3,}", s)]
+    return [w[:4] for w in re.findall(r"[а-яa-z]{3,}", s) if w[:4] not in STOP_W]
 
 def build_index():
     global IDX
@@ -195,6 +199,16 @@ def recipe_text(r, full=True):
         if r.get("tip"): out.append("Совет: " + r["tip"])
         if r.get("warn") and r["warn"] != "None": out.append("Осторожно: " + r["warn"])
     return "\n".join(out)
+
+def teaser(r):
+    e = html.escape; steps = r.get("steps") or []
+    show = max(1, min(2, len(steps) - 2)); hidden = len(steps) - show
+    lines = ["Есть у меня для тебя рецепт, милок 🎁", "", f"<b>{e(r['title'])}</b> (в книжке это №{r['n']})",
+             f"<i>{e(r.get('intro', ''))}</i>", "", "<b>Что нужно:</b>"] + [f"— {e(x)}" for x in r.get("ing") or []]
+    lines += ["", "<b>Как делаю:</b>"] + [f"{i + 1}. {e(x)}" for i, x in enumerate(steps[:show])]
+    lines += ["", f"🔒 Дальше ещё {hidden} {'шаг' if hidden == 1 else 'шага' if hidden < 5 else 'шагов'} и мой совет — в полной книжке. "
+                  "Там все 100 рецептов, а спрашивать меня можно сколько хочешь."]
+    return "\n".join(lines)
 
 def recipe_message(n):
     r = next((x for x in BOOK.get("recipes", []) if str(x["n"]) == str(n)), None)
@@ -248,7 +262,8 @@ HELLO = ("Здравствуй, милок! Я баба Зоя.\n\n"
          "Всю жизнь кормлю людей простой деревенской едой — такой, после которой в животе легко, а не тяжело. "
          "Собрала всё в одну книжку: «Бабушкин стол», 100 рецептов — квашеная капуста, хлеб на закваске, кисели, "
          "каши, щи, мёд с пасеки и праздничный стол без тяжести.\n\n"
-         "Семь рецептов дарю просто так — жми «7 рецептов даром», пришлю прямо сюда. А кто возьмёт всю книжку — может спрашивать меня тут, что приготовить.")
+         "Напиши мне, какой продукт у тебя есть — тыква, капуста, гречка, яблоки, — и я подберу рецепт из книжки. Один — в подарок. "
+         "А ещё семь рецептов дарю просто так — жми «7 рецептов даром».")
 THANKS = ("Спасибо, милок! Книжка твоя — насовсем.\n\n"
           "Нажми «Открыть всю книжку» — откроются все 100 рецептов, правила, меню на неделю и таблицы. "
           "Дальше она будет открываться сама, через кнопку «Книжка» внизу чата.\n\n"
@@ -442,7 +457,7 @@ def on_message(m):
     if text.startswith("/free"): return free_menu(chat)
     if text.startswith("/help"):
         return tg("sendMessage", chat_id=chat, reply_markup=start_kb(), text=(
-            "Как всё устроено:\n\n• /free — семь рецептов даром, пришлю прямо сюда.\n• «Книжка» внизу чата — приложение с рецептами.\n"
+            "Как всё устроено:\n\n• Напиши, какой продукт есть, — подберу рецепт из книжки, один в подарок.\n• /free — семь рецептов даром, пришлю прямо сюда.\n• «Книжка» внизу чата — приложение с рецептами.\n"
             f"• Вся книга — {PRICE} ⭐, один раз и навсегда. Купил, а закрыто — /book.\n"
             "• Подарить книжку — /gift, пришлю открытку со ссылкой.\n"
             + (f"• Клуб бабы Зои — /club, письмо с новым рецептом каждую неделю, {CLUB_PRICE} ⭐ в месяц.\n" if CLUB else "")
@@ -463,19 +478,31 @@ def on_message(m):
         to_admin(f"Сообщение от {m['from'].get('first_name', '')} (@{m['from'].get('username', '-')}, id {chat}):\n\n{text[:3500]}")
         return tg("sendMessage", chat_id=chat, text="Поняла, милок, передала внучке — она разберётся и ответит.")
     if not text: return
-    if AI_KEY and (access or not u.get("ai_trial")):
-        if not ai_allowed(uid):
-            return tg("sendMessage", chat_id=chat, text="Ой, милок, наговорились мы сегодня. Завтра спрашивай — отвечу.")
-        tg("sendChatAction", chat_id=chat, action="typing")
-        ans = ai_answer(uid, text)
-        if not ans:
-            return tg("sendMessage", chat_id=chat, text="Что-то я задумалась, милок. Спроси ещё раз чуть попозже.")
-        if not access:
+    if not access:
+        if not u.get("ai_trial") and not words(text):
+            return tg("sendMessage", chat_id=chat, reply_markup=kb([B_FREE]),
+                      text="Здравствуй, милок! Напиши, какой продукт у тебя есть — тыква, капуста, гречка, яблоки, — и я подберу рецепт из своей книжки. Один — в подарок.")
+        if not u.get("ai_trial"):
             u["ai_trial"] = 1; mark()
-            return tg("sendMessage", chat_id=chat, text=ans + "\n\nА дальше спрашивать меня могут те, у кого книжка, — и всё, что в ней, откроется.", reply_markup=kb([B_BUY()], [B_OPEN]))
-        return tg("sendMessage", chat_id=chat, text=ans)
-    to_admin(f"Сообщение от {m['from'].get('first_name', '')} (@{m['from'].get('username', '-')}, id {chat}):\n\n{text[:3500]}")
-    tg("sendMessage", chat_id=chat, text="Спасибо, милок, прочитаю. А спрашивать меня про готовку могут те, у кого книжка:", reply_markup=kb([B_BUY()], [B_OPEN]))
+            rs = find_recipes(text, 1)
+            if rs:
+                return tg("sendMessage", chat_id=chat, text=teaser(rs[0]), parse_mode="HTML", reply_markup=kb([B_BUY()], [B_FREE]))
+            if AI_KEY and ai_allowed(uid):
+                tg("sendChatAction", chat_id=chat, action="typing")
+                ans = ai_answer(uid, text)
+                if ans:
+                    return tg("sendMessage", chat_id=chat, text=ans + "\n\nА все сто рецептов — в книжке, и спрашивать меня тогда можно сколько хочешь.", reply_markup=kb([B_BUY()], [B_FREE]))
+            u["ai_trial"] = 0; mark()
+            return tg("sendMessage", chat_id=chat, text="Напиши, милок, какой продукт у тебя есть — тыква, капуста, гречка, яблоки, — и я подберу рецепт.")
+        return tg("sendMessage", chat_id=chat, reply_markup=kb([B_BUY()], [B_FREE]),
+                  text="Один рецепт я тебе уже подарила, милок. А все сто — в книжке, и спрашивать меня тогда можно сколько хочешь, про любой продукт.")
+    if not AI_KEY:
+        return tg("sendMessage", chat_id=chat, text="Спасибо, милок, прочитаю!")
+    if not ai_allowed(uid):
+        return tg("sendMessage", chat_id=chat, text="Ой, милок, наговорились мы сегодня. Завтра спрашивай — отвечу.")
+    tg("sendChatAction", chat_id=chat, action="typing")
+    ans = ai_answer(uid, text)
+    return tg("sendMessage", chat_id=chat, text=ans or "Что-то я задумалась, милок. Спроси ещё раз чуть попозже.")
 
 def redeem(chat, uid, code, m):
     g = ST["gifts"].get(code)
