@@ -248,7 +248,7 @@ HELLO = ("Здравствуй, милок! Я баба Зоя.\n\n"
          "Всю жизнь кормлю людей простой деревенской едой — такой, после которой в животе легко, а не тяжело. "
          "Собрала всё в одну книжку: «Бабушкин стол», 100 рецептов — квашеная капуста, хлеб на закваске, кисели, "
          "каши, щи, мёд с пасеки и праздничный стол без тяжести.\n\n"
-         "Семь рецептов открыла тебе даром — жми «Открыть книжку». А кто возьмёт всю — может спрашивать меня прямо тут, что приготовить.")
+         "Семь рецептов дарю просто так — жми «7 рецептов даром», пришлю прямо сюда. А кто возьмёт всю книжку — может спрашивать меня тут, что приготовить.")
 THANKS = ("Спасибо, милок! Книжка твоя — насовсем.\n\n"
           "Нажми «Открыть всю книжку» — откроются все 100 рецептов, правила, меню на неделю и таблицы. "
           "Дальше она будет открываться сама, через кнопку «Книжка» внизу чата.\n\n"
@@ -261,9 +261,26 @@ B_OPEN = {"text": "Открыть книжку", "web_app": {"url": APP}}
 def B_BUY(): return {"text": f"Вся книга — {PRICE} ⭐", "callback_data": "buy"}
 B_GIFT = {"text": "🎁 Подарить книжку", "callback_data": "gift"}
 B_CLUB = {"text": "✉️ Клуб бабы Зои", "callback_data": "club"}
+B_FREE = {"text": "🎁 7 рецептов даром", "callback_data": "free"}
+FREE = [1, 7, 8, 4, 11, 41, 56]
+
+def free_menu(chat):
+    rows = []
+    for n in FREE:
+        r = next((x for x in BOOK.get("recipes", []) if str(x["n"]) == str(n)), None)
+        if r: rows.append([{"text": r["title"], "callback_data": f"fr_{n}"}])
+    tg("sendMessage", chat_id=chat, reply_markup=kb(*rows),
+       text="Выбирай, милок, какой рецепт прислать. Все семь — даром, и в приложении они тоже открыты.")
+
+def send_free(chat, uid, n):
+    msg = recipe_message(n)
+    if not msg: return
+    u = user(uid); got = set(u.get("free", [])); got.add(n); u["free"] = sorted(got); mark()
+    tg("sendMessage", chat_id=chat, text=msg, parse_mode="HTML",
+       reply_markup=kb([{"text": "Ещё рецепт даром", "callback_data": "free"}], [B_BUY()]))
 
 def start_kb():
-    rows = [[B_OPEN], [B_BUY()], [B_GIFT]]
+    rows = [[B_FREE], [B_OPEN], [B_BUY()], [B_GIFT]]
     if CLUB: rows.append([B_CLUB])
     return kb(*rows)
 
@@ -400,8 +417,13 @@ def on_message(m):
 
     if text.startswith("/start"):
         arg = text[6:].strip()
+        free = arg.startswith("free")
+        if free: arg = arg[5:]
         if u.get("src") == "direct" and arg and not arg.startswith("g") and arg not in ("buy", "book", "gift", "club"):
             u["src"] = arg[:20]; mark()
+        if free:
+            tg("sendMessage", chat_id=chat, text="Здравствуй, милок! Я баба Зоя. Обещала рецепты даром — держи, выбирай.")
+            return free_menu(chat)
         if arg == "buy": return invoice(chat, "book")
         if arg == "gift": return invoice(chat, "gift")
         if arg == "club": return club_menu(chat, u)
@@ -417,9 +439,10 @@ def on_message(m):
     if text.startswith("/buy"): return invoice(chat, "book")
     if text.startswith("/gift"): return invoice(chat, "gift")
     if text.startswith("/club"): return club_menu(chat, u)
+    if text.startswith("/free"): return free_menu(chat)
     if text.startswith("/help"):
         return tg("sendMessage", chat_id=chat, reply_markup=start_kb(), text=(
-            "Как всё устроено:\n\n• «Книжка» внизу чата — приложение с рецептами. Семь открыты всем.\n"
+            "Как всё устроено:\n\n• /free — семь рецептов даром, пришлю прямо сюда.\n• «Книжка» внизу чата — приложение с рецептами.\n"
             f"• Вся книга — {PRICE} ⭐, один раз и навсегда. Купил, а закрыто — /book.\n"
             "• Подарить книжку — /gift, пришлю открытку со ссылкой.\n"
             + (f"• Клуб бабы Зои — /club, письмо с новым рецептом каждую неделю, {CLUB_PRICE} ⭐ в месяц.\n" if CLUB else "")
@@ -491,6 +514,8 @@ def on_callback(c):
         if u.get("promo", 0) > now(): invoice(chat, "promo")
         else: tg("sendMessage", chat_id=chat, text="Скидка уже закончилась, милок. Но книжка всё там же:", reply_markup=kb([B_BUY()]))
     elif d == "club": club_menu(chat, u)
+    elif d == "free": free_menu(chat)
+    elif d.startswith("fr_") and d[3:].isdigit() and int(d[3:]) in FREE: send_free(chat, uid, int(d[3:]))
     elif d.startswith("cl_") and in_club(u):
         i = int(d[3:])
         if 0 <= i <= released(): send_letter(chat, i)
@@ -543,6 +568,7 @@ def stats_text():
     for s, n in src.most_common(12):
         b = sum(1 for u in paid if u.get("src", "direct") == s); lines.append(f"{s}: {n} / {b}")
     lines += ["", "<b>Продажи</b>:"] + [f"{k}: {v} шт., {ST['stars'].get(k, 0)} ⭐" for k, v in ST["sales"].items() if not k.startswith("src:")]
+    lines += ["", f"Взяли рецепты даром: {sum(1 for u in us if u.get('free'))} чел."]
     lines += ["", f"Дожим: 1-е письмо {sum(1 for u in us if u.get('d1'))}, скидка {sum(1 for u in ST['users'].values() if u.get('d2'))}",
               f"Подарков открыто: {sum(1 for g in ST['gifts'].values() if g['to'])} из {len(ST['gifts'])}",
               f"В клубе сейчас: {sum(1 for u in ST['users'].values() if in_club(u))}",
