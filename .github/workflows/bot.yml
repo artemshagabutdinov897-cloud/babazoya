@@ -23,8 +23,10 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           BOOK_KEY: ${{ secrets.BOOK_KEY }}
           ADMIN_CODE: ${{ secrets.ADMIN_CODE }}
+          CLUB_KEY: ${{ secrets.CLUB_KEY }}
+          BRATUHA_API_KEY: ${{ secrets.BRATUHA_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
           PRICE_STARS: "600"
-        run: |
-          git config user.name "baba-zoya-bot"
-          git config user.email "baba-zoya-bot@users.noreply.github.com"
-          python bot/bot.py
+          PROMO_STARS: "450"
+          CLUB_STARS: "100"
+        run: python bot/bot.py
