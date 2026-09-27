@@ -23,7 +23,7 @@ jobs:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           BOOK_KEY: ${{ secrets.BOOK_KEY }}
           ADMIN_CODE: ${{ secrets.ADMIN_CODE }}
-          PRICE_STARS: "390"
+          PRICE_STARS: "600"
         run: |
           git config user.name "baba-zoya-bot"
           git config user.email "baba-zoya-bot@users.noreply.github.com"
