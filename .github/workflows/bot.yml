@@ -1,0 +1,30 @@
+name: bot
+on:
+  schedule:
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
+concurrency:
+  group: babazoya-bot
+  cancel-in-progress: false
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 358
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q requests cryptography
+      - name: run bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          BOOK_KEY: ${{ secrets.BOOK_KEY }}
+          ADMIN_CODE: ${{ secrets.ADMIN_CODE }}
+          PRICE_STARS: "390"
+        run: |
+          git config user.name "baba-zoya-bot"
+          git config user.email "baba-zoya-bot@users.noreply.github.com"
+          python bot/bot.py
