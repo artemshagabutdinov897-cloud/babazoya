@@ -326,7 +326,7 @@ def invoice(chat, kind, cur="XTR"):
 def pay_choice(chat, kind, text):
     if not YK: return invoice(chat, kind)
     tg("sendMessage", chat_id=chat, text=text, reply_markup=kb(
-        [{"text": "💳 Картой / СБП", "callback_data": f"{kind}_rub"}],
+        [{"text": "💳 Картой", "callback_data": f"{kind}_rub"}],
         [{"text": "⭐ Звёздами Telegram", "callback_data": f"{kind}_xtr"}]))
 
 def deliver(chat, text=THANKS):
@@ -480,7 +480,7 @@ def on_message(m):
     if text.startswith("/help"):
         return tg("sendMessage", chat_id=chat, reply_markup=start_kb(), text=(
             "Как всё устроено:\n\n• Напиши, какой продукт есть, — подберу рецепт из книжки, один в подарок.\n• /free — семь рецептов даром, пришлю прямо сюда.\n• «Книжка» внизу чата — приложение с рецептами.\n"
-            "• Вся книга — картой, по СБП или звёздами, один раз и навсегда. Купил, а закрыто — /book.\n"
+            "• Вся книга — картой или звёздами, один раз и навсегда. Купил, а закрыто — /book.\n"
             "• Подарить книжку — /gift, пришлю открытку со ссылкой.\n"
             + (f"• Клуб бабы Зои — /club, письмо с новым рецептом каждую неделю, {CLUB_PRICE} ⭐ в месяц.\n" if CLUB else "")
             + "• У кого книжка — может спрашивать меня прямо здесь, что приготовить.\n\n"

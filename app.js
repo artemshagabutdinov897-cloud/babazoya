@@ -258,9 +258,9 @@ function paywall() {
   sh.innerHTML = `<div class="pane pay"><div class="ph" style="background-image:url(img/cover.jpg)"><div class="dots"></div></div><div class="in">
   <div class="kick">Полная книжка</div><h2>Бабушкин стол</h2>
   <ul><li>100 деревенских рецептов с пошаговыми таймерами</li><li>Поиск «что есть дома» по продуктам</li><li>15 бабушкиных правил и меню на неделю со списком покупок</li><li>Заметки пасечника и рассказы деда Коли</li><li>PDF-книжка на 132 страницы — в чат</li></ul>
-  ${C.invoiceRub ? `<button class="btn" data-act="buyrub">💳 Картой или СБП</button><button class="btn ghost" style="margin-top:8px" data-act="buy">⭐ Звёздами Telegram</button>` : `<button class="btn" data-act="buy">Купить книжку</button>`}
+  ${C.invoiceRub ? `<button class="btn" data-act="buyrub">💳 Картой</button><button class="btn ghost" style="margin-top:8px" data-act="buy">⭐ Звёздами Telegram</button>` : `<button class="btn" data-act="buy">Купить книжку</button>`}
   <button class="btn ghost" style="margin-top:8px" data-act="close">Позже</button>
-  <small>${C.invoiceRub ? "Оплата картой, по СБП или звёздами Telegram." : "Оплата звёздами Telegram."} Книжка откроется здесь навсегда.</small></div></div>`;
+  <small>${C.invoiceRub ? "Оплата картой или звёздами Telegram." : "Оплата звёздами Telegram."} Книжка откроется здесь навсегда.</small></div></div>`;
   sh.classList.remove("hidden");
   sh.onclick = e => { if (e.target === sh) sh.classList.add("hidden"); };
   bind(sh);
@@ -268,12 +268,17 @@ function paywall() {
 function buy(link) {
   link = link || C.invoice;
   if (!TG || !link) { toast("Открой книжку из бота @" + (C.bot || "")); return; }
-  TG.openInvoice(link, status => {
+  haptic();
+  try { TG.openInvoice(link, onPaid); }
+  catch (e) {
+    try { TG.openTelegramLink(link); } catch (e2) { toast("Не открылась оплата: " + (e2.message || e.message || e)); }
+  }
+}
+function onPaid(status) {
     if (status === "paid") {
       $("#sheet").classList.add("hidden");
       TG.showAlert("Спасибо, милок! Баба Зоя прислала в чат книжку и кнопку «Открыть книжку». Нажми её — и все рецепты откроются.", () => TG.close());
     } else if (status === "failed") toast("Оплата не прошла, попробуй ещё раз");
-  });
 }
 
 /* ---------- events ---------- */
