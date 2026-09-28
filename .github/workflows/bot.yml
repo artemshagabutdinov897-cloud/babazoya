@@ -29,4 +29,7 @@ jobs:
           PRICE_STARS: "600"
           PROMO_STARS: "450"
           CLUB_STARS: "100"
+          YK_TOKEN: ${{ secrets.YK_TOKEN_TEST }}
+          PRICE_RUB: "1300"
+          PROMO_RUB: "990"
         run: python bot/bot.py

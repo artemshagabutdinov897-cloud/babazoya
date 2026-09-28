@@ -15,6 +15,9 @@ REPO = os.environ.get("GITHUB_REPOSITORY", "")
 PRICE = int(os.environ.get("PRICE_STARS", "600"))
 PROMO = int(os.environ.get("PROMO_STARS", "450"))
 CLUB_PRICE = int(os.environ.get("CLUB_STARS", "100"))
+YK = os.environ.get("YK_TOKEN", "")
+RUB = int(os.environ.get("PRICE_RUB", "1300"))
+RUB_PROMO = int(os.environ.get("PROMO_RUB", "990"))
 APP = os.environ.get("APP_URL", "https://artemshagabutdinov897-cloud.github.io/babazoya/")
 RUN_SECONDS = int(os.environ.get("RUN_SECONDS", str(5 * 3600 + 50 * 60)))
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -274,6 +277,12 @@ def kb(*rows):
 
 B_OPEN = {"text": "Открыть книжку", "web_app": {"url": APP}}
 def B_BUY(): return {"text": f"Вся книга — {PRICE} ⭐", "callback_data": "buy"}
+def B_RUB(): return {"text": f"Картой / СБП — {RUB} ₽", "callback_data": "buy_rub"}
+def buy_rows():
+    if YK: return [[B_RUB()], [{"text": f"Звёздами — {PRICE} ⭐", "callback_data": "buy"}]]
+    return [[B_BUY()]]
+def money(amount, cur):
+    return f"{amount // 100} ₽" if cur == "RUB" else f"{amount} ⭐"
 B_GIFT = {"text": "🎁 Подарить книжку", "callback_data": "gift"}
 B_CLUB = {"text": "✉️ Клуб бабы Зои", "callback_data": "club"}
 B_FREE = {"text": "🎁 7 рецептов даром", "callback_data": "free"}
@@ -292,23 +301,36 @@ def send_free(chat, uid, n):
     if not msg: return
     u = user(uid); got = set(u.get("free", [])); got.add(n); u["free"] = sorted(got); mark()
     tg("sendMessage", chat_id=chat, text=msg, parse_mode="HTML",
-       reply_markup=kb([{"text": "Ещё рецепт даром", "callback_data": "free"}], [B_BUY()]))
+       reply_markup=kb([{"text": "Ещё рецепт даром", "callback_data": "free"}], *buy_rows()))
 
 def start_kb():
-    rows = [[B_FREE], [B_OPEN], [B_BUY()], [B_GIFT]]
+    rows = [[B_FREE], [B_OPEN]] + buy_rows() + [[B_GIFT]]
     if CLUB: rows.append([B_CLUB])
     return kb(*rows)
 
 
 # ---------- оплата ----------
-def invoice(chat, kind):
+def invoice(chat, kind, cur="XTR"):
+    if cur == "RUB" and not YK: cur = "XTR"
     title, desc, payload, amount = {
         "book": ("Бабушкин стол — 100 рецептов", "Вся книга бабы Зои: 100 деревенских рецептов для лёгкого живота, правила, меню на неделю. В приложении и PDF в чат.", "book-v1", PRICE),
         "promo": ("Бабушкин стол — со скидкой", f"Вся книга бабы Зои за {PROMO} ⭐ вместо {PRICE}. Скидка действует сутки.", "promo-v1", PROMO),
         "gift": ("Книжка «Бабушкин стол» в подарок", "Пришлю тебе открытку со ссылкой — перешлёшь её тому, кому даришь. Открыть подарок можно один раз.", "gift-v1", PRICE),
     }[kind]
-    tg("sendInvoice", chat_id=chat, title=title, description=desc, payload=payload, currency="XTR",
-       prices=[{"label": "Книга", "amount": amount}], photo_url=APP + "img/cover.jpg", photo_width=860, photo_height=1075)
+    extra = {}
+    if cur == "RUB":
+        amount = (RUB_PROMO if kind == "promo" else RUB) * 100
+        desc = desc.replace(f"за {PROMO} ⭐ вместо {PRICE}", f"за {RUB_PROMO} ₽ вместо {RUB}")
+        extra = {"provider_token": YK}
+    tg("sendInvoice", chat_id=chat, title=title, description=desc, payload=payload, currency=cur,
+       prices=[{"label": "Книга", "amount": amount}], photo_url=APP + "img/cover.jpg", photo_width=860, photo_height=1075, **extra)
+
+def pay_choice(chat, kind, text):
+    if not YK: return invoice(chat, kind)
+    rub = RUB_PROMO if kind == "promo" else RUB; st = PROMO if kind == "promo" else PRICE
+    tg("sendMessage", chat_id=chat, text=text, reply_markup=kb(
+        [{"text": f"Картой / СБП — {rub} ₽", "callback_data": f"{kind}_rub"}],
+        [{"text": f"Звёздами — {st} ⭐", "callback_data": f"{kind}_xtr"}]))
 
 def deliver(chat, text=THANKS):
     tg("sendMessage", chat_id=chat, text=text,
@@ -335,23 +357,26 @@ def has_paid(uid):
         u["paid"] = 1; u.setdefault("tp", now()); mark(); return True
     return False
 
-def count_sale(u, kind, amount):
+def count_sale(u, kind, amount, cur="XTR"):
     ST["sales"][kind] = ST["sales"].get(kind, 0) + 1
-    ST["stars"][kind] = ST["stars"].get(kind, 0) + amount
+    if cur == "RUB":
+        ST.setdefault("rub", {}); ST["rub"][kind] = ST["rub"].get(kind, 0) + amount // 100
+    else:
+        ST["stars"][kind] = ST["stars"].get(kind, 0) + amount
     ST["sales"]["src:" + u.get("src", "direct")] = ST["sales"].get("src:" + u.get("src", "direct"), 0) + 1
     mark()
 
 def on_payment(m):
     chat = m["chat"]["id"]; uid = m["from"]["id"]; u = user(uid); sp = m["successful_payment"]
-    pl, amount = sp.get("invoice_payload", ""), sp.get("total_amount", 0)
+    pl, amount, cur = sp.get("invoice_payload", ""), sp.get("total_amount", 0), sp.get("currency", "XTR")
     name = m["from"].get("first_name", "")
     if pl in ("book-v1", "promo-v1"):
         u["paid"] = 1; u["tp"] = now(); u["via"] = "promo" if pl == "promo-v1" else "book"
-        count_sale(u, u["via"], amount); deliver(chat)
-        to_admin(f"Продажа! {name} купил книгу за {amount} ⭐ ({u['via']}, источник: {u.get('src')}).")
+        count_sale(u, u["via"], amount, cur); deliver(chat)
+        to_admin(f"Продажа! {name} купил книгу за {money(amount, cur)} ({u['via']}, источник: {u.get('src')}).")
     elif pl == "gift-v1":
         code = "".join(random.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(8))
-        ST["gifts"][code] = {"by": uid, "t": now(), "to": None}; count_sale(u, "gift", amount)
+        ST["gifts"][code] = {"by": uid, "t": now(), "to": None}; count_sale(u, "gift", amount, cur)
         link = f"https://t.me/BabaZoya_bot?start=g{code}"
         cap = ("🎁 <b>Тебе подарок!</b>\n\nКнижка «Бабушкин стол» — 100 деревенских рецептов для лёгкого живота: "
                "квашеная капуста, хлеб на закваске, кисели, каши и мёд с пасеки.\n\n"
@@ -359,7 +384,7 @@ def on_payment(m):
         tg("sendPhoto", chat_id=chat, photo=APP + "img/cover.jpg", caption=cap, parse_mode="HTML",
            reply_markup=kb([{"text": "🎁 Открыть подарок", "url": link}]))
         tg("sendMessage", chat_id=chat, text="Готово, милок! Перешли открытку выше тому, кому даришь. Открыть её можно один раз — я скажу, когда откроют.")
-        to_admin(f"Продажа! {name} купил книгу в подарок за {amount} ⭐.")
+        to_admin(f"Продажа! {name} купил книгу в подарок за {money(amount, cur)}.")
     elif pl == "club-v1":
         exp = sp.get("subscription_expiration_date") or now() + 30 * DAY
         first = not u.get("club_ever"); u["club"] = exp; u["club_ever"] = 1
@@ -439,8 +464,8 @@ def on_message(m):
         if free:
             tg("sendMessage", chat_id=chat, text="Здравствуй, милок! Я баба Зоя. Обещала рецепты даром — держи, выбирай.")
             return free_menu(chat)
-        if arg == "buy": return invoice(chat, "book")
-        if arg == "gift": return invoice(chat, "gift")
+        if arg == "buy": return pay_choice(chat, "book", "Как удобнее заплатить, милок?")
+        if arg == "gift": return pay_choice(chat, "gift", "Подарок — дело хорошее! Как заплатишь?")
         if arg == "club": return club_menu(chat, u)
         if arg.startswith("g") and len(arg) == 9: return redeem(chat, uid, arg[1:], m)
         if arg == "book": text = "/book"
@@ -450,15 +475,15 @@ def on_message(m):
             return
     if text.startswith("/book"):
         if has_paid(uid): return deliver(chat, "Вот твоя книжка, милок. Жми — и все рецепты откроются.")
-        return tg("sendMessage", chat_id=chat, text="Покупку не нашла, милок. Если платил — напиши сюда, разберусь. А купить можно тут:", reply_markup=kb([B_BUY()]))
-    if text.startswith("/buy"): return invoice(chat, "book")
-    if text.startswith("/gift"): return invoice(chat, "gift")
+        return tg("sendMessage", chat_id=chat, text="Покупку не нашла, милок. Если платил — напиши сюда, разберусь. А купить можно тут:", reply_markup=kb(*buy_rows()))
+    if text.startswith("/buy"): return pay_choice(chat, "book", "Как удобнее заплатить, милок?")
+    if text.startswith("/gift"): return pay_choice(chat, "gift", "Подарок — дело хорошее! Как заплатишь?")
     if text.startswith("/club"): return club_menu(chat, u)
     if text.startswith("/free"): return free_menu(chat)
     if text.startswith("/help"):
         return tg("sendMessage", chat_id=chat, reply_markup=start_kb(), text=(
             "Как всё устроено:\n\n• Напиши, какой продукт есть, — подберу рецепт из книжки, один в подарок.\n• /free — семь рецептов даром, пришлю прямо сюда.\n• «Книжка» внизу чата — приложение с рецептами.\n"
-            f"• Вся книга — {PRICE} ⭐, один раз и навсегда. Купил, а закрыто — /book.\n"
+            f"• Вся книга — {RUB} ₽ картой или {PRICE} ⭐, один раз и навсегда. Купил, а закрыто — /book.\n"
             "• Подарить книжку — /gift, пришлю открытку со ссылкой.\n"
             + (f"• Клуб бабы Зои — /club, письмо с новым рецептом каждую неделю, {CLUB_PRICE} ⭐ в месяц.\n" if CLUB else "")
             + "• У кого книжка — может спрашивать меня прямо здесь, что приготовить.\n\n"
@@ -486,15 +511,15 @@ def on_message(m):
             u["ai_trial"] = 1; mark()
             rs = find_recipes(text, 1)
             if rs:
-                return tg("sendMessage", chat_id=chat, text=teaser(rs[0]), parse_mode="HTML", reply_markup=kb([B_BUY()], [B_FREE]))
+                return tg("sendMessage", chat_id=chat, text=teaser(rs[0]), parse_mode="HTML", reply_markup=kb(*buy_rows(), [B_FREE]))
             if AI_KEY and ai_allowed(uid):
                 tg("sendChatAction", chat_id=chat, action="typing")
                 ans = ai_answer(uid, text)
                 if ans:
-                    return tg("sendMessage", chat_id=chat, text=ans + "\n\nА все сто рецептов — в книжке, и спрашивать меня тогда можно сколько хочешь.", reply_markup=kb([B_BUY()], [B_FREE]))
+                    return tg("sendMessage", chat_id=chat, text=ans + "\n\nА все сто рецептов — в книжке, и спрашивать меня тогда можно сколько хочешь.", reply_markup=kb(*buy_rows(), [B_FREE]))
             u["ai_trial"] = 0; mark()
             return tg("sendMessage", chat_id=chat, text="Напиши, милок, какой продукт у тебя есть — тыква, капуста, гречка, яблоки, — и я подберу рецепт.")
-        return tg("sendMessage", chat_id=chat, reply_markup=kb([B_BUY()], [B_FREE]),
+        return tg("sendMessage", chat_id=chat, reply_markup=kb(*buy_rows(), [B_FREE]),
                   text="Один рецепт я тебе уже подарила, милок. А все сто — в книжке, и спрашивать меня тогда можно сколько хочешь, про любой продукт.")
     if not AI_KEY:
         return tg("sendMessage", chat_id=chat, text="Спасибо, милок, прочитаю!")
@@ -535,11 +560,16 @@ def on_callback(c):
     tg("answerCallbackQuery", callback_query_id=c["id"])
     d = c.get("data", ""); chat = c["message"]["chat"]["id"] if c.get("message") else c["from"]["id"]
     uid = c["from"]["id"]; u = user(uid)
-    if d == "buy": invoice(chat, "book")
-    elif d == "gift": invoice(chat, "gift")
-    elif d == "promo":
-        if u.get("promo", 0) > now(): invoice(chat, "promo")
-        else: tg("sendMessage", chat_id=chat, text="Скидка уже закончилась, милок. Но книжка всё там же:", reply_markup=kb([B_BUY()]))
+    if d in ("buy", "book_xtr"): invoice(chat, "book")
+    elif d in ("buy_rub", "book_rub"): invoice(chat, "book", "RUB")
+    elif d == "gift": pay_choice(chat, "gift", "Подарок — дело хорошее! Как заплатишь?")
+    elif d == "gift_xtr": invoice(chat, "gift")
+    elif d == "gift_rub": invoice(chat, "gift", "RUB")
+    elif d in ("promo", "promo_xtr", "promo_rub"):
+        if u.get("promo", 0) > now():
+            if d == "promo": pay_choice(chat, "promo", "Как удобнее заплатить, милок?")
+            else: invoice(chat, "promo", "RUB" if d == "promo_rub" else "XTR")
+        else: tg("sendMessage", chat_id=chat, text="Скидка уже закончилась, милок. Но книжка всё там же:", reply_markup=kb(*buy_rows()))
     elif d == "club": club_menu(chat, u)
     elif d == "free": free_menu(chat)
     elif d.startswith("fr_") and d[3:].isdigit() and int(d[3:]) in FREE: send_free(chat, uid, int(d[3:]))
@@ -553,7 +583,9 @@ def on_callback(c):
 
 def on_precheckout(q):
     pl = q.get("invoice_payload"); uid = q["from"]["id"]
-    ok = q.get("currency") == "XTR" and pl in ("book-v1", "promo-v1", "gift-v1", "club-v1")
+    cur = q.get("currency"); amt = q.get("total_amount", 0)
+    ok = pl in ("book-v1", "promo-v1", "gift-v1", "club-v1") and (cur == "XTR" or (cur == "RUB" and YK and pl != "club-v1"))
+    if ok and cur == "RUB": ok = amt == (RUB_PROMO if pl == "promo-v1" else RUB) * 100
     err = "Что-то не так со счётом, попробуй ещё раз из бота."
     if pl == "promo-v1" and user(uid).get("promo", 0) + 1800 < now():
         ok, err = False, "Скидка уже закончилась, милок. Книжку можно взять по обычной цене — /buy"
@@ -572,12 +604,14 @@ def periodic():
             if not u.get("d1") and t - u["t0"] > DAY:
                 u["d1"] = t; mark(); sent += 1
                 msg = recipe_message(26) or ""
-                tg("sendMessage", chat_id=chat, parse_mode="HTML", reply_markup=kb([B_BUY()], [B_OPEN]),
+                tg("sendMessage", chat_id=chat, parse_mode="HTML", reply_markup=kb(*buy_rows(), [B_OPEN]),
                    text="Милок, обещала ещё рецепт — держи, мой любимый пирог 🥧\n\n" + msg + "\n\nА ещё 92 таких — в книжке.")
             elif u.get("d1") and not u.get("d2") and t - u["d1"] > 2 * DAY:
                 u["d2"] = t; u["promo"] = t + DAY; mark(); sent += 1
-                tg("sendMessage", chat_id=chat, reply_markup=kb([{"text": f"Взять за {PROMO} ⭐", "callback_data": "promo"}]),
-                   text=(f"Вижу, заглядываешь, милок, а книжку всё не берёшь. Давай так: до завтра отдам за {PROMO} ⭐ вместо {PRICE}. "
+                pk = kb([{"text": f"Взять за {RUB_PROMO} ₽", "callback_data": "promo_rub"}], [{"text": f"Или за {PROMO} ⭐", "callback_data": "promo_xtr"}]) if YK else kb([{"text": f"Взять за {PROMO} ⭐", "callback_data": "promo"}])
+                offer = f"{RUB_PROMO} ₽ вместо {RUB}" if YK else f"{PROMO} ⭐ вместо {PRICE}"
+                tg("sendMessage", chat_id=chat, reply_markup=pk,
+                   text=(f"Вижу, заглядываешь, милок, а книжку всё не берёшь. Давай так: до завтра отдам за {offer}. "
                          "Сто рецептов, правила, меню на неделю — и спрашивать меня можно будет прямо тут."))
         elif not u.get("rev") and t - u.get("tp", t) > 7 * DAY:
             u["rev"] = t; u["revs"] = "wait"; mark(); sent += 1
@@ -594,7 +628,7 @@ def stats_text():
     lines += ["", "<b>Откуда пришли</b> (людей / купили):"]
     for s, n in src.most_common(12):
         b = sum(1 for u in paid if u.get("src", "direct") == s); lines.append(f"{s}: {n} / {b}")
-    lines += ["", "<b>Продажи</b>:"] + [f"{k}: {v} шт., {ST['stars'].get(k, 0)} ⭐" for k, v in ST["sales"].items() if not k.startswith("src:")]
+    lines += ["", "<b>Продажи</b>:"] + [f"{k}: {v} шт., {ST.get('rub', {}).get(k, 0)} ₽ + {ST['stars'].get(k, 0)} ⭐" for k, v in ST["sales"].items() if not k.startswith("src:")]
     lines += ["", f"Взяли рецепты даром: {sum(1 for u in us if u.get('free'))} чел."]
     lines += ["", f"Дожим: 1-е письмо {sum(1 for u in us if u.get('d1'))}, скидка {sum(1 for u in ST['users'].values() if u.get('d2'))}",
               f"Подарков открыто: {sum(1 for g in ST['gifts'].values() if g['to'])} из {len(ST['gifts'])}",
