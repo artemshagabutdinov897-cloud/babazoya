@@ -91,7 +91,7 @@ home() {
     <h1>Бабушкин стол</h1><p>Заготовки, выпечка и мёд для лёгкого живота</p></div></section>
   <div class="wrap">
     <button class="letter-card" data-go="letter"><img src="${photo(0)}" alt=""><div><b>Письмо от бабы Зои</b><div class="hand">Здравствуй, милок. Садись, расскажу, зачем эта книжка…</div></div></button>
-    ${S.unlocked ? "" : `<div class="unlock"><div class="kick" style="color:#FFD6BC">Вся книжка</div><h3>Откройте все 100 рецептов</h3><p>Сейчас открыто 7. После покупки — вся книга здесь и PDF в чат.</p><button class="btn" data-act="pay">Открыть книгу · ${esc(C.priceRub || C.price || "")}</button></div>`}
+    ${S.unlocked ? "" : `<div class="unlock"><div class="kick" style="color:#FFD6BC">Вся книжка</div><h3>Откройте все 100 рецептов</h3><p>Сейчас открыто 7. После покупки — вся книга здесь и PDF в чат.</p><button class="btn" data-act="pay">Открыть всю книгу</button></div>`}
     <div class="section-t"><h2>Рецепт дня</h2></div>
     <button class="daily" data-go="recipe" data-arg="${d.n}"><div class="ph" style="background-image:url(${photo(d.ch)})"></div><div class="in"><div class="kick">№ ${d.n} · ${esc(chap(d.ch).title)}</div><h3>${esc(d.title)}</h3><p>${esc(d.intro)}</p></div></button>
     <div class="section-t"><h2>Главы</h2><button data-tab="list">Все рецепты</button></div>
@@ -135,7 +135,7 @@ chapter(i) {
   return `<div class="rhead" style="background-image:url(${photo(i)})"><div class="dots"></div></div>
   <div class="rbody"><div class="kick">Глава ${i}</div><h1>${esc(c.title)}</h1><p class="muted" style="font-style:italic;margin:0 0 8px">${esc(c.intro)}</p></div>
   ${items}${notes.length ? `<div class="group-t">На заметку</div>` + notes.map(n => `<button class="item" data-go="note" data-arg="${S.book.notes.indexOf(n)}"><span class="no">✎</span><span class="t"><b>${esc(n.title)}</b><small>${esc(n.tag)}</small></span><span class="r">${ic("chev")}</span></button>`).join("") : ""}
-  ${S.unlocked ? "" : `<div class="wrap"><div class="unlock"><h3>Вся глава — в полной книжке</h3><p>Сейчас открыто ${S.pub.free.filter(r => r.ch === i).length} из ${c.to - c.from + 1}.</p><button class="btn" data-act="pay">Открыть книгу · ${esc(C.priceRub || C.price || "")}</button></div></div>`}<div style="height:20px"></div>`;
+  ${S.unlocked ? "" : `<div class="wrap"><div class="unlock"><h3>Вся глава — в полной книжке</h3><p>Сейчас открыто ${S.pub.free.filter(r => r.ch === i).length} из ${c.to - c.from + 1}.</p><button class="btn" data-act="pay">Открыть всю книгу</button></div></div>`}<div style="height:20px"></div>`;
 },
 recipe(n) {
   n = +n;
@@ -153,7 +153,7 @@ recipe(n) {
     <button class="btn cook" data-cook="${r.n}">Готовить по шагам</button>
     <div class="tip"><div class="k">Совет бабы Зои</div><div class="v">${esc(r.tip)}</div></div>
     ${r.warn ? `<div class="warn"><b>!</b><span>${esc(r.warn)}</span></div>` : ""}
-    ${S.unlocked ? "" : `<div class="unlock" style="margin-bottom:24px"><h3>Понравилось?</h3><p>Ещё 93 рецепта, правила и меню на неделю — в полной книжке.</p><button class="btn" data-act="pay">Открыть книгу · ${esc(C.priceRub || C.price || "")}</button></div>`}
+    ${S.unlocked ? "" : `<div class="unlock" style="margin-bottom:24px"><h3>Понравилось?</h3><p>Ещё 93 рецепта, правила и меню на неделю — в полной книжке.</p><button class="btn" data-act="pay">Открыть всю книгу</button></div>`}
   </div>`;
 },
 fav() {
@@ -179,7 +179,7 @@ rules() {
   const list = S.unlocked ? S.book.rules : S.pub.rulesPreview;
   return `<div class="page"><h1>Бабушкины правила</h1><p class="muted" style="font-style:italic">Привычки, чтоб живот не болел. Это не медицина — так жили наши матери.</p>
   ${list.map((r, k) => `<div class="rule"><div class="n">${k + 1}</div><div><b>${esc(r.t)}</b><span>${esc(r.d)}</span></div></div>`).join("")}
-  ${S.unlocked ? "" : `<div class="unlock"><h3>Ещё 12 правил</h3><p>Все 15 правил, меню на неделю и список покупок — в полной книжке.</p><button class="btn" data-act="pay">Открыть книгу · ${esc(C.priceRub || C.price || "")}</button></div>`}</div><div style="height:30px"></div>`;
+  ${S.unlocked ? "" : `<div class="unlock"><h3>Ещё 12 правил</h3><p>Все 15 правил, меню на неделю и список покупок — в полной книжке.</p><button class="btn" data-act="pay">Открыть всю книгу</button></div>`}</div><div style="height:30px"></div>`;
 },
 week() {
   if (!S.unlocked) return lockedPage("Неделя лёгкого живота", "Меню на 7 дней из рецептов книжки и список покупок.");
@@ -207,7 +207,7 @@ note(k) {
 },
 };
 function lockedPage(t, d) {
-  return `<div class="page"><h1>${esc(t)}</h1><p>${esc(d)}</p><div class="unlock"><h3>Это в полной книжке</h3><p>Все 100 рецептов, правила, меню и таблицы.</p><button class="btn" data-act="pay">Открыть книгу · ${esc(C.priceRub || C.price || "")}</button></div></div>`;
+  return `<div class="page"><h1>${esc(t)}</h1><p>${esc(d)}</p><div class="unlock"><h3>Это в полной книжке</h3><p>Все 100 рецептов, правила, меню и таблицы.</p><button class="btn" data-act="pay">Открыть всю книгу</button></div></div>`;
 }
 
 /* ---------- timers ---------- */
@@ -258,8 +258,7 @@ function paywall() {
   sh.innerHTML = `<div class="pane pay"><div class="ph" style="background-image:url(img/cover.jpg)"><div class="dots"></div></div><div class="in">
   <div class="kick">Полная книжка</div><h2>Бабушкин стол</h2>
   <ul><li>100 деревенских рецептов с пошаговыми таймерами</li><li>Поиск «что есть дома» по продуктам</li><li>15 бабушкиных правил и меню на неделю со списком покупок</li><li>Заметки пасечника и рассказы деда Коли</li><li>PDF-книжка на 132 страницы — в чат</li></ul>
-  <div class="price">${esc(C.priceRub || C.price || "")}</div>
-  ${C.invoiceRub ? `<button class="btn" data-act="buyrub">Картой или СБП — ${esc(C.priceRub)}</button><button class="btn ghost" style="margin-top:8px" data-act="buy">Звёздами Telegram — ${esc(C.price)}</button>` : `<button class="btn" data-act="buy">Купить книжку</button>`}
+  ${C.invoiceRub ? `<button class="btn" data-act="buyrub">💳 Картой или СБП</button><button class="btn ghost" style="margin-top:8px" data-act="buy">⭐ Звёздами Telegram</button>` : `<button class="btn" data-act="buy">Купить книжку</button>`}
   <button class="btn ghost" style="margin-top:8px" data-act="close">Позже</button>
   <small>${C.invoiceRub ? "Оплата картой, по СБП или звёздами Telegram." : "Оплата звёздами Telegram."} Книжка откроется здесь навсегда.</small></div></div>`;
   sh.classList.remove("hidden");

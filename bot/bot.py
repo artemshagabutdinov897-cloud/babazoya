@@ -276,10 +276,8 @@ def kb(*rows):
     return {"inline_keyboard": [list(r) for r in rows]}
 
 B_OPEN = {"text": "Открыть книжку", "web_app": {"url": APP}}
-def B_BUY(): return {"text": f"Вся книга — {PRICE} ⭐", "callback_data": "buy"}
-def B_RUB(): return {"text": f"Картой / СБП — {RUB} ₽", "callback_data": "buy_rub"}
+def B_BUY(): return {"text": "📖 Купить всю книжку", "callback_data": "buy_choice" if YK else "buy"}
 def buy_rows():
-    if YK: return [[B_RUB()], [{"text": f"Звёздами — {PRICE} ⭐", "callback_data": "buy"}]]
     return [[B_BUY()]]
 def money(amount, cur):
     return f"{amount // 100} ₽" if cur == "RUB" else f"{amount} ⭐"
@@ -327,10 +325,9 @@ def invoice(chat, kind, cur="XTR"):
 
 def pay_choice(chat, kind, text):
     if not YK: return invoice(chat, kind)
-    rub = RUB_PROMO if kind == "promo" else RUB; st = PROMO if kind == "promo" else PRICE
     tg("sendMessage", chat_id=chat, text=text, reply_markup=kb(
-        [{"text": f"Картой / СБП — {rub} ₽", "callback_data": f"{kind}_rub"}],
-        [{"text": f"Звёздами — {st} ⭐", "callback_data": f"{kind}_xtr"}]))
+        [{"text": "💳 Картой / СБП", "callback_data": f"{kind}_rub"}],
+        [{"text": "⭐ Звёздами Telegram", "callback_data": f"{kind}_xtr"}]))
 
 def deliver(chat, text=THANKS):
     tg("sendMessage", chat_id=chat, text=text,
@@ -483,7 +480,7 @@ def on_message(m):
     if text.startswith("/help"):
         return tg("sendMessage", chat_id=chat, reply_markup=start_kb(), text=(
             "Как всё устроено:\n\n• Напиши, какой продукт есть, — подберу рецепт из книжки, один в подарок.\n• /free — семь рецептов даром, пришлю прямо сюда.\n• «Книжка» внизу чата — приложение с рецептами.\n"
-            f"• Вся книга — {RUB} ₽ картой или {PRICE} ⭐, один раз и навсегда. Купил, а закрыто — /book.\n"
+            "• Вся книга — картой, по СБП или звёздами, один раз и навсегда. Купил, а закрыто — /book.\n"
             "• Подарить книжку — /gift, пришлю открытку со ссылкой.\n"
             + (f"• Клуб бабы Зои — /club, письмо с новым рецептом каждую неделю, {CLUB_PRICE} ⭐ в месяц.\n" if CLUB else "")
             + "• У кого книжка — может спрашивать меня прямо здесь, что приготовить.\n\n"
@@ -560,7 +557,8 @@ def on_callback(c):
     tg("answerCallbackQuery", callback_query_id=c["id"])
     d = c.get("data", ""); chat = c["message"]["chat"]["id"] if c.get("message") else c["from"]["id"]
     uid = c["from"]["id"]; u = user(uid)
-    if d in ("buy", "book_xtr"): invoice(chat, "book")
+    if d == "buy_choice": pay_choice(chat, "book", "Как удобнее заплатить, милок?")
+    elif d in ("buy", "book_xtr"): invoice(chat, "book")
     elif d in ("buy_rub", "book_rub"): invoice(chat, "book", "RUB")
     elif d == "gift": pay_choice(chat, "gift", "Подарок — дело хорошее! Как заплатишь?")
     elif d == "gift_xtr": invoice(chat, "gift")
@@ -608,10 +606,10 @@ def periodic():
                    text="Милок, обещала ещё рецепт — держи, мой любимый пирог 🥧\n\n" + msg + "\n\nА ещё 92 таких — в книжке.")
             elif u.get("d1") and not u.get("d2") and t - u["d1"] > 2 * DAY:
                 u["d2"] = t; u["promo"] = t + DAY; mark(); sent += 1
-                pk = kb([{"text": f"Взять за {RUB_PROMO} ₽", "callback_data": "promo_rub"}], [{"text": f"Или за {PROMO} ⭐", "callback_data": "promo_xtr"}]) if YK else kb([{"text": f"Взять за {PROMO} ⭐", "callback_data": "promo"}])
-                offer = f"{RUB_PROMO} ₽ вместо {RUB}" if YK else f"{PROMO} ⭐ вместо {PRICE}"
+                pk = kb([{"text": "Взять со скидкой", "callback_data": "promo"}])
+                offer = "со скидкой"
                 tg("sendMessage", chat_id=chat, reply_markup=pk,
-                   text=(f"Вижу, заглядываешь, милок, а книжку всё не берёшь. Давай так: до завтра отдам за {offer}. "
+                   text=(f"Вижу, заглядываешь, милок, а книжку всё не берёшь. Давай так: до завтра отдам книжку {offer}. "
                          "Сто рецептов, правила, меню на неделю — и спрашивать меня можно будет прямо тут."))
         elif not u.get("rev") and t - u.get("tp", t) > 7 * DAY:
             u["rev"] = t; u["revs"] = "wait"; mark(); sent += 1
