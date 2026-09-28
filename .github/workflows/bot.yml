@@ -29,7 +29,9 @@ jobs:
           PRICE_STARS: "600"
           PROMO_STARS: "450"
           CLUB_STARS: "100"
-          YK_TOKEN: ${{ secrets.YK_TOKEN_TEST }}
+          YK_TOKEN: ${{ secrets.YK_TOKEN_LIVE }}
+          YK_SECRET: ${{ secrets.YK_SECRET }}
+          YK_SHOP_ID: "1476727"
           PRICE_RUB: "1300"
           PROMO_RUB: "990"
         run: python bot/bot.py

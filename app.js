@@ -258,9 +258,10 @@ function paywall() {
   sh.innerHTML = `<div class="pane pay"><div class="ph" style="background-image:url(img/cover.jpg)"><div class="dots"></div></div><div class="in">
   <div class="kick">Полная книжка</div><h2>Бабушкин стол</h2>
   <ul><li>100 деревенских рецептов с пошаговыми таймерами</li><li>Поиск «что есть дома» по продуктам</li><li>15 бабушкиных правил и меню на неделю со списком покупок</li><li>Заметки пасечника и рассказы деда Коли</li><li>PDF-книжка на 132 страницы — в чат</li></ul>
-  ${C.invoiceRub ? `<button class="btn" data-act="buyrub">💳 Картой</button><button class="btn ghost" style="margin-top:8px" data-act="buy">⭐ Звёздами Telegram</button>` : `<button class="btn" data-act="buy">Купить книжку</button>`}
+  ${C.sbp ? `<button class="btn" data-act="buysbp">⚡ СБП — через приложение банка</button><div style="height:8px"></div>` : ""}
+  ${C.invoiceRub ? `<button class="btn${C.sbp ? " ghost" : ""}" data-act="buyrub">💳 Картой</button><button class="btn ghost" style="margin-top:8px" data-act="buy">⭐ Звёздами Telegram</button>` : `<button class="btn" data-act="buy">Купить книжку</button>`}
   <button class="btn ghost" style="margin-top:8px" data-act="close">Позже</button>
-  <small>${C.invoiceRub ? "Оплата картой или звёздами Telegram." : "Оплата звёздами Telegram."} Книжка откроется здесь навсегда.</small></div></div>`;
+  <small>${C.invoiceRub ? (C.sbp ? "Оплата по СБП, картой или звёздами Telegram." : "Оплата картой или звёздами Telegram.") : "Оплата звёздами Telegram."} Книжка откроется здесь навсегда.</small></div></div>`;
   sh.classList.remove("hidden");
   sh.onclick = e => { if (e.target === sh) sh.classList.add("hidden"); };
   bind(sh);
@@ -273,6 +274,12 @@ function buy(link) {
   catch (e) {
     try { TG.openTelegramLink(link); } catch (e2) { toast("Не открылась оплата: " + (e2.message || e.message || e)); }
   }
+}
+function buySbp() {
+  haptic();
+  const link = "https://t.me/" + (C.bot || "BabaZoya_bot") + "?start=sbp";
+  try { TG.openTelegramLink(link); setTimeout(() => { try { TG.close(); } catch (e) {} }, 400); }
+  catch (e) { location.href = link; }
 }
 function onPaid(status) {
     if (status === "paid") {
@@ -301,7 +308,7 @@ function bind(root) {
   root.querySelectorAll("[data-cook]").forEach(b => b.onclick = () => cook(+b.dataset.cook));
   root.querySelectorAll("[data-act]").forEach(b => b.onclick = () => {
     const a = b.dataset.act;
-    if (a === "pay") paywall(); else if (a === "buy") buy(); else if (a === "buyrub") buy(C.invoiceRub); else if (a === "close") $("#sheet").classList.add("hidden");
+    if (a === "pay") paywall(); else if (a === "buy") buy(); else if (a === "buyrub") buy(C.invoiceRub); else if (a === "buysbp") buySbp(); else if (a === "close") $("#sheet").classList.add("hidden");
     else if (a === "clearshop") { S.shop = {}; store.set("shop", "{}"); render(); }
   });
   const q = root.querySelector("#q");
