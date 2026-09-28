@@ -382,6 +382,10 @@ def on_payment(m):
            reply_markup=kb([{"text": "🎁 Открыть подарок", "url": link}]))
         tg("sendMessage", chat_id=chat, text="Готово, милок! Перешли открытку выше тому, кому даришь. Открыть её можно один раз — я скажу, когда откроют.")
         to_admin(f"Продажа! {name} купил книгу в подарок за {money(amount, cur)}.")
+    elif pl == "check-v1":
+        tg("sendMessage", chat_id=chat, text=f"✅ Проверочная оплата {money(amount, cur)} прошла. Оплата картой работает.")
+        to_admin(f"Проверочная оплата {money(amount, cur)} прошла (id {chat}).")
+        return
     elif pl == "club-v1":
         exp = sp.get("subscription_expiration_date") or now() + 30 * DAY
         first = not u.get("club_ever"); u["club"] = exp; u["club_ever"] = 1
@@ -584,6 +588,7 @@ def on_precheckout(q):
     cur = q.get("currency"); amt = q.get("total_amount", 0)
     ok = pl in ("book-v1", "promo-v1", "gift-v1", "club-v1") and (cur == "XTR" or (cur == "RUB" and YK and pl != "club-v1"))
     if ok and cur == "RUB": ok = amt == (RUB_PROMO if pl == "promo-v1" else RUB) * 100
+    if pl == "check-v1" and cur == "RUB" and 0 < amt <= 10000: ok = True
     err = "Что-то не так со счётом, попробуй ещё раз из бота."
     if pl == "promo-v1" and user(uid).get("promo", 0) + 1800 < now():
         ok, err = False, "Скидка уже закончилась, милок. Книжку можно взять по обычной цене — /buy"
