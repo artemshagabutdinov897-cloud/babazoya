@@ -288,6 +288,20 @@ B_GIFT = {"text": "🎁 Подарить книжку", "callback_data": "gift"}
 B_CLUB = {"text": "✉️ Клуб бабы Зои", "callback_data": "club"}
 B_FREE = {"text": "🎁 7 рецептов даром", "callback_data": "free"}
 FREE = [1, 7, 8, 4, 11, 41, 56]
+# рецепты-подарки по кодовым словам из Instagram (ссылка вида ?start=r22 или ?start=r21_22)
+LEAD = {4, 7, 8, 21, 22, 41, 42, 56, 57, 64}
+
+def send_lead(chat, uid, nums):
+    u = user(uid); got = set(u.get("lead", []))
+    tg("sendMessage", chat_id=chat, text="Здравствуй, милок! Я баба Зоя. Обещала рецепт — держи 👇")
+    for n in nums:
+        msg = recipe_message(n)
+        if msg:
+            got.add(n); tg("sendMessage", chat_id=chat, text=msg, parse_mode="HTML")
+    u["lead"] = sorted(got); mark()
+    tg("sendMessage", chat_id=chat, reply_markup=kb([B_FREE], *buy_rows(), [B_OPEN]),
+       text=("Это один рецепт из моей книжки «Бабушкин стол». Там их сто — капуста, хлеб, кисели, каши, мёд с пасеки.\n\n"
+             "Ещё семь дарю просто так — жми «7 рецептов даром». А напишешь, какой продукт у тебя есть, — подберу, что приготовить."))
 
 def free_menu(chat):
     rows = []
@@ -543,6 +557,9 @@ def on_message(m):
         if free:
             tg("sendMessage", chat_id=chat, text="Здравствуй, милок! Я баба Зоя. Обещала рецепты даром — держи, выбирай.")
             return free_menu(chat)
+        if re.fullmatch(r"r\d+(_\d+)*", arg):
+            nums = [int(x) for x in arg[1:].split("_") if int(x) in LEAD]
+            if nums: return send_lead(chat, uid, nums)
         if arg == "buy": return pay_choice(chat, "book", "Как удобнее заплатить, милок?")
         if arg == "sbp": return sbp_pay(chat, uid, "promo" if u.get("promo", 0) > now() else "book")
         if arg == "gift": return pay_choice(chat, "gift", "Подарок — дело хорошее! Как заплатишь?")
@@ -716,7 +733,7 @@ def stats_text():
     for s, n in src.most_common(12):
         b = sum(1 for u in paid if u.get("src", "direct") == s); lines.append(f"{s}: {n} / {b}")
     lines += ["", "<b>Продажи</b>:"] + [f"{k}: {v} шт., {ST.get('rub', {}).get(k, 0)} ₽ + {ST['stars'].get(k, 0)} ⭐" for k, v in ST["sales"].items() if not k.startswith("src:")]
-    lines += ["", f"Взяли рецепты даром: {sum(1 for u in us if u.get('free'))} чел."]
+    lines += ["", f"Взяли рецепты даром: {sum(1 for u in us if u.get('free'))} чел.", f"Пришли по кодовому слову: {sum(1 for u in us if u.get('lead'))} чел."]
     lines += ["", f"Дожим: 1-е письмо {sum(1 for u in us if u.get('d1'))}, скидка {sum(1 for u in ST['users'].values() if u.get('d2'))}",
               f"Подарков открыто: {sum(1 for g in ST['gifts'].values() if g['to'])} из {len(ST['gifts'])}",
               f"В клубе сейчас: {sum(1 for u in ST['users'].values() if in_club(u))}",
