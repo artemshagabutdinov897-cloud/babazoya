@@ -1,0 +1,27 @@
+name: fetch-file
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        required: true
+      path:
+        required: true
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          URL: ${{ inputs.url }}
+          DEST: ${{ inputs.path }}
+        run: |
+          mkdir -p "$(dirname "$DEST")"
+          curl -sSfL -o "$DEST" "$URL"
+          ls -la "$DEST"
+          git config user.name "artemshagabutdinov897-cloud"
+          git config user.email "artemshagabutdinov897@gmail.com"
+          git add "$DEST"
+          git commit -m "file: $DEST"
+          git push
