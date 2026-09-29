@@ -18,6 +18,7 @@ CLUB_PRICE = int(os.environ.get("CLUB_STARS", "100"))
 YK = os.environ.get("YK_TOKEN", "")
 RUB = int(os.environ.get("PRICE_RUB", "1300"))
 RUB_PROMO = int(os.environ.get("PROMO_RUB", "990"))
+RUB_OLD = int(os.environ.get("OLD_RUB", "2600"))     # зачёркнутая цена — показываем только в момент оплаты
 YKS = os.environ.get("YK_SECRET", "").strip()          # секретный ключ ЮKassa (API) — для СБП
 YK_SHOP = os.environ.get("YK_SHOP_ID", "1476727").strip()
 BOT_NAME = os.environ.get("BOT_NAME", "BabaZoya_bot")
@@ -319,7 +320,7 @@ def send_free(chat, uid, n):
        reply_markup=kb([{"text": "Ещё рецепт даром", "callback_data": "free"}], *buy_rows()))
 
 def start_kb():
-    rows = [[B_FREE], [B_OPEN]] + buy_rows() + [[B_GIFT]]
+    rows = [[B_FREE], [{"text": "🥣 Какой у меня живот? Тест", "callback_data": "test"}], [B_OPEN]] + buy_rows() + [[B_GIFT]]
     if CLUB: rows.append([B_CLUB])
     return kb(*rows)
 
@@ -381,7 +382,8 @@ def sbp_pay(chat, uid, kind):
                   reply_markup=kb([{"text": "💳 Картой", "callback_data": f"{kind}_rub"}] if YK else [B_FREE],
                                   [{"text": "⭐ Звёздами Telegram", "callback_data": f"{kind}_xtr"}]))
     ST.setdefault("yk", {})[j["id"]] = {"uid": uid, "chat": chat, "kind": kind, "t": now()}; mark(); save_state()
-    tg("sendMessage", chat_id=chat, text=(f"Оплата по СБП — {rub} ₽.\n\nЖми кнопку: откроется страница оплаты, выбери свой банк — "
+    old = f"<s>{RUB_OLD} ₽</s> " if kind != "check" else ""
+    tg("sendMessage", chat_id=chat, parse_mode="HTML", text=(f"Оплата по СБП — {old}<b>{rub} ₽</b>.\n\nЖми кнопку: откроется страница оплаты, выбери свой банк — "
                                           "он сам откроется, останется подтвердить. Как деньги придут, я сразу пришлю книжку сюда."),
        reply_markup=kb([{"text": f"⚡ Оплатить {rub} ₽ по СБП", "url": url}],
                        [{"text": "Я оплатил(а)", "callback_data": "ykc_" + j["id"]}]))
@@ -492,6 +494,49 @@ def _club_payment(m, u, sp, amount, chat, name):
     mark(); save_state()
 
 
+# ---------- тест «Какой у тебя живот» ----------
+TEST = [
+    ("Как живот после обеда?", ["Легко, будто и не ел", "Бывает тяжесть", "Почти всегда камнем, клонит в сон"]),
+    ("Квашеное ешь — капусту, огурцы, квас?", ["Каждый день", "Иногда", "Почти никогда"]),
+    ("Что у тебя на завтрак?", ["Каша или что-то домашнее", "Бутерброд да кофе", "Ничего, на бегу"]),
+    ("Какой хлеб ешь?", ["Свой или ржаной", "Обычный магазинный", "Батоны да выпечку"]),
+    ("Как после праздников?", ["Всё хорошо", "Пару дней тяжело", "Неделю в себя прихожу"]),
+]
+RESULTS = [
+    (3, "Живот у тебя, милок, лёгкий 🌿", "Ешь ты по-деревенски, живот и благодарит. Держи мой взвар — он к любому столу, а после праздников особенно.", [64]),
+    (6, "Живот просит подмоги 🥬", "Ест живот много магазинного, а живого мало. Начни с простого — квашеной капусты к обеду. Держи мой рецепт.", [1]),
+    (10, "Живот устал, милок 🍯", "Тяжёлое да на бегу — вот живот и устаёт. Начни утро с овсяного киселя, как у нас в деревне. Держи рецепт.", [56]),
+]
+
+def test_q(chat, u, i):
+    q, opts = TEST[i]
+    rows = [[{"text": o, "callback_data": f"tq_{i}_{j}"}] for j, o in enumerate(opts)]
+    tg("sendMessage", chat_id=chat, text=f"Вопрос {i + 1} из {len(TEST)}\n\n<b>{q}</b>", parse_mode="HTML", reply_markup=kb(*rows))
+
+def test_start(chat, u):
+    u["test"] = []; mark()
+    tg("sendMessage", chat_id=chat, text="Давай узнаем, какой у тебя живот, милок. Пять вопросов, отвечай как есть — я не ругаюсь 🙂")
+    test_q(chat, u, 0)
+
+def test_answer(chat, uid, u, i, j):
+    ans = u.get("test", [])
+    if len(ans) != i: return
+    ans.append(j); u["test"] = ans; mark()
+    if len(ans) < len(TEST): return test_q(chat, u, len(ans))
+    score = sum(ans)
+    for top, title, text, nums in RESULTS:
+        if score <= top: break
+    u["test_res"] = title; ST["sales"]["test"] = ST["sales"].get("test", 0) + 1; mark()
+    tg("sendMessage", chat_id=chat, parse_mode="HTML",
+       text=f"<b>{title}</b>\n\n{text}\n\n<i>Это не диагноз, а бабушкины наблюдения. Если живот болит всерьёз — к врачу.</i>")
+    for n in nums:
+        msg = recipe_message(n)
+        if msg: tg("sendMessage", chat_id=chat, text=msg, parse_mode="HTML")
+    tg("sendMessage", chat_id=chat, reply_markup=kb([B_FREE], *buy_rows()),
+       text="А сто таких рецептов — в моей книжке «Бабушкин стол». Ещё семь дарю просто так 👇")
+    to_admin(f"Тест прошёл id {uid}: {title} ({score} баллов)")
+
+
 # ---------- ответы бабы Зои ----------
 HIST = collections.defaultdict(lambda: collections.deque(maxlen=6))
 SYSTEM = ("Ты — баба Зоя, 74-летняя деревенская бабушка из-под Рязани: русская печь, огород, пасека. Автор книжки «Бабушкин стол». "
@@ -561,7 +606,8 @@ def on_message(m):
             nums = [int(x) for x in arg[1:].split("_") if int(x) in LEAD]
             if nums: return send_lead(chat, uid, nums)
         if arg == "buy": return pay_choice(chat, "book", "Как удобнее заплатить, милок?")
-        if arg == "sbp": return sbp_pay(chat, uid, "promo" if u.get("promo", 0) > now() else "book")
+        if arg.startswith("test"): return test_start(chat, u)
+        if arg.startswith("sbp"): return sbp_pay(chat, uid, "promo" if u.get("promo", 0) > now() else "book")
         if arg == "gift": return pay_choice(chat, "gift", "Подарок — дело хорошее! Как заплатишь?")
         if arg == "club": return club_menu(chat, u)
         if arg.startswith("g") and len(arg) == 9 and arg != "gift": return redeem(chat, uid, arg[1:], m)
@@ -577,6 +623,7 @@ def on_message(m):
     if text.startswith("/gift"): return pay_choice(chat, "gift", "Подарок — дело хорошее! Как заплатишь?")
     if text.startswith("/club"): return club_menu(chat, u)
     if text.startswith("/free"): return free_menu(chat)
+    if text.startswith("/test"): return test_start(chat, u)
     if text.startswith("/help"):
         return tg("sendMessage", chat_id=chat, reply_markup=start_kb(), text=(
             "Как всё устроено:\n\n• Напиши, какой продукт есть, — подберу рецепт из книжки, один в подарок.\n• /free — семь рецептов даром, пришлю прямо сюда.\n• «Книжка» внизу чата — приложение с рецептами.\n"
@@ -668,6 +715,9 @@ def on_callback(c):
         if u.get("promo", 0) > now(): sbp_pay(chat, uid, "promo")
         else: tg("sendMessage", chat_id=chat, text="Скидка уже закончилась, милок. Но книжка всё там же:", reply_markup=kb(*buy_rows()))
     elif d.startswith("ykc_"): yk_check(d[4:], chat)
+    elif d == "test": test_start(chat, u)
+    elif d.startswith("tq_"):
+        _, i, j = d.split("_"); test_answer(chat, uid, u, int(i), int(j))
     elif d in ("promo", "promo_xtr", "promo_rub"):
         if u.get("promo", 0) > now():
             if d == "promo": pay_choice(chat, "promo", "Как удобнее заплатить, милок?")
