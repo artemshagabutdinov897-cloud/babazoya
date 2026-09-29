@@ -1,0 +1,29 @@
+name: apply
+on:
+  workflow_dispatch:
+    inputs:
+      patch:
+        description: "gzip+base64 git diff"
+        required: true
+      msg:
+        required: true
+permissions:
+  contents: write
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: apply
+        env:
+          PATCH: ${{ inputs.patch }}
+          MSG: ${{ inputs.msg }}
+        run: |
+          echo "$PATCH" | base64 -d | gunzip > /tmp/p.diff
+          git apply --whitespace=nowarn /tmp/p.diff
+          python3 -m py_compile bot/bot.py
+          git config user.name "artemshagabutdinov897-cloud"
+          git config user.email "artemshagabutdinov897@gmail.com"
+          git add -A
+          git commit -m "$MSG"
+          git push

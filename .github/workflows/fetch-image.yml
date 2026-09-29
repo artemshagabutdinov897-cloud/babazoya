@@ -1,0 +1,32 @@
+name: fetch-image
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        required: true
+      path:
+        required: true
+      width:
+        required: false
+        default: "1080"
+permissions:
+  contents: write
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: fetch
+        env:
+          URL: ${{ inputs.url }}
+          OUT: ${{ inputs.path }}
+          W: ${{ inputs.width }}
+        run: |
+          curl -sSL -o /tmp/src "$URL"
+          ffmpeg -hide_banner -loglevel error -y -i /tmp/src -vf "scale=${W}:-2" -q:v 3 "$OUT"
+          ls -la "$OUT"
+          git config user.name "artemshagabutdinov897-cloud"
+          git config user.email "artemshagabutdinov897@gmail.com"
+          git add "$OUT"
+          git commit -m "img: $OUT"
+          git push
