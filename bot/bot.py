@@ -339,7 +339,7 @@ def invoice(chat, kind, cur="XTR"):
         desc = desc.replace(f"за {PROMO} ⭐ вместо {PRICE}", f"за {RUB_PROMO} ₽ вместо {RUB}")
         extra = {"provider_token": YK}
     tg("sendInvoice", chat_id=chat, title=title, description=desc, payload=payload, currency=cur,
-       prices=[{"label": "Книга", "amount": amount}], photo_url=APP + "img/cover.jpg", photo_width=860, photo_height=1075, **extra)
+       prices=[{"label": "Книга", "amount": amount}], photo_url=APP + "img/mockup.jpg", photo_width=1080, photo_height=1935, **extra)
 
 def pay_choice(chat, kind, text):
     if not (YK or YKS): return invoice(chat, kind)
@@ -468,7 +468,7 @@ def grant(chat, uid, name, kind, amount, cur, via=""):
         cap = ("🎁 <b>Тебе подарок!</b>\n\nКнижка «Бабушкин стол» — 100 деревенских рецептов для лёгкого живота: "
                "квашеная капуста, хлеб на закваске, кисели, каши и мёд с пасеки.\n\n"
                f"Открыть подарок: {link}\n\nС любовью, баба Зоя")
-        tg("sendPhoto", chat_id=chat, photo=APP + "img/cover.jpg", caption=cap, parse_mode="HTML",
+        tg("sendPhoto", chat_id=chat, photo=APP + "img/mockup.jpg", caption=cap, parse_mode="HTML",
            reply_markup=kb([{"text": "🎁 Открыть подарок", "url": link}]))
         tg("sendMessage", chat_id=chat, text="Готово, милок! Перешли открытку выше тому, кому даришь. Открыть её можно один раз — я скажу, когда откроют.")
         to_admin(f"Продажа! {name or uid} купил книгу в подарок за {money(amount, cur)}{how}.")
@@ -613,7 +613,7 @@ def on_message(m):
         if arg.startswith("g") and len(arg) == 9 and arg != "gift": return redeem(chat, uid, arg[1:], m)
         if arg == "book": text = "/book"
         else:
-            if not tg("sendPhoto", chat_id=chat, photo=APP + "img/cover.jpg", caption=HELLO, reply_markup=start_kb()):
+            if not tg("sendPhoto", chat_id=chat, photo=APP + "img/mockup.jpg", caption=HELLO, reply_markup=start_kb()):
                 tg("sendMessage", chat_id=chat, text=HELLO, reply_markup=start_kb())
             return
     if text.startswith("/book"):
