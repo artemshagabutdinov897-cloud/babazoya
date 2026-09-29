@@ -103,6 +103,7 @@ home() {
       <button class="mini gift" data-go="gift"><span class="e">🎁</span><b>Подарок</b><span>7 рецептов даром</span></button>
       <button class="mini test" data-go="test" data-arg="0"><span class="e">🥣</span><b>Тест</b><span>Какой у тебя живот</span></button>
     </div>
+    <button class="giftrow" data-act="giftpay"><span class="e">💝</span><span class="t"><b>Подарить книжку</b><span>Маме, бабушке, подруге — открыткой в Телеграм</span></span><span class="r">${ic("chev")}</span></button>
     ${S.unlocked ? "" : `<div class="unlock"><div class="kick" style="color:#FFD6BC">Вся книжка</div><h3>Откройте все 100 рецептов</h3><p>Сейчас открыто 7. После покупки — вся книга здесь и PDF в чат.</p><button class="btn" data-act="pay">Открыть всю книгу</button></div>`}
     <div class="section-t"><h2>Рецепт дня</h2></div>
     <button class="daily" data-go="recipe" data-arg="${d.n}"><div class="ph" style="background-image:url(${photo(d.ch)})"></div><div class="in"><div class="kick">№ ${d.n} · ${esc(chap(d.ch).title)}</div><h3>${esc(d.title)}</h3><p>${esc(d.intro)}</p></div></button>
@@ -222,9 +223,9 @@ gift() {
   return `<div class="page"><div class="kick" style="margin-top:18px">Подарок от бабы Зои</div><h1>7 рецептов даром</h1>
     <p class="hand" style="font-size:22px;line-height:1.1;color:var(--wine)">Держи, милок. С них я и сама начинала — капуста, огурцы, кисель да медовая вода.</p></div>
   ${items}
+  <div class="wrap"><div class="giftbox"><div class="e">💝</div><h3>Подарить книжку</h3><p>Порадуй маму, бабушку или подругу: пришлю открытку со ссылкой, перешлёшь её тому, кому даришь. Откроется один раз.</p>
+      <button class="btn" data-act="giftpay">Подарить «Бабушкин стол»</button></div></div>
   <div class="wrap">
-    <div class="giftbox"><div class="e">💝</div><h3>Подарить книжку</h3><p>Порадуй маму, бабушку или подругу: пришлю открытку со ссылкой, перешлёшь её тому, кому даришь. Откроется один раз.</p>
-      <button class="btn" data-act="giftbuy">Подарить «Бабушкин стол»</button></div>
     ${S.unlocked ? "" : `<div class="unlock"><h3>А все 100 рецептов — в книжке</h3><p>Правила, меню на неделю и PDF в чат.</p><button class="btn" data-act="pay">Открыть всю книгу</button></div>`}
   </div><div style="height:24px"></div>`;
 },
@@ -408,6 +409,20 @@ function nyPay() {
   sh.onclick = e => { if (e.target === sh) sh.classList.add("hidden"); };
   bind(sh);
 }
+function giftPay() {
+  const sh = $("#sheet");
+  sh.innerHTML = `<div class="pane pay"><div class="ph" style="background-image:url(img/cover.jpg)"><div class="dots"></div></div><div class="in">
+  <div class="kick">Подарок</div><h2>«Бабушкин стол» в подарок</h2>
+  <ul><li>После оплаты баба Зоя пришлёт в чат открытку со ссылкой</li><li>Перешли её маме, бабушке или подруге</li><li>Откроет один раз — и книжка её навсегда: 100 рецептов и PDF</li></ul>
+  ${C.sbp ? `<button class="btn" data-act="giftsbp">⚡ СБП — через приложение банка</button><div style="height:8px"></div>` : ""}
+  ${C.giftInvoiceRub ? `<button class="btn${C.sbp ? " ghost" : ""}" data-act="giftrub">💳 Картой</button>` : ""}
+  ${C.giftInvoice ? `<button class="btn ghost" style="margin-top:8px" data-act="giftxtr">⭐ Звёздами Telegram</button>` : `<button class="btn${C.sbp ? " ghost" : ""}" data-act="giftbuy">💳 Картой или ⭐ звёздами</button>`}
+  <button class="btn ghost" style="margin-top:8px" data-act="close">Позже</button>
+  <small>${C.giftInvoice ? "Картой и звёздами — прямо здесь, по СБП — через бота." : "Оплата в боте бабы Зои."}</small></div></div>`;
+  sh.classList.remove("hidden");
+  sh.onclick = e => { if (e.target === sh) sh.classList.add("hidden"); };
+  bind(sh);
+}
 function toBot(start) {
   haptic();
   const link = BOT() + "?start=" + start;
@@ -432,7 +447,9 @@ function buySbp() {
 function onPaid(status, kind) {
     if (status === "paid") {
       $("#sheet").classList.add("hidden");
-      TG.showAlert(kind === "ny"
+      TG.showAlert(kind === "gift"
+        ? "Спасибо, милок! Открытка с подарком уже в чате у бабы Зои — перешли её тому, кому даришь."
+        : kind === "ny"
         ? "Спасибо, милок! «Новогодний стол» твой. Баба Зоя прислала в чат кнопку «Открыть новогоднюю книжку» — нажми её, и всё откроется."
         : "Спасибо, милок! Баба Зоя прислала в чат книжку и кнопку «Открыть книжку». Нажми её — и все рецепты откроются.", () => TG.close());
     } else if (status === "failed") toast("Оплата не прошла, попробуй ещё раз");
@@ -465,7 +482,7 @@ function bind(root) {
   });
   root.querySelectorAll("[data-act]").forEach(b => b.onclick = () => {
     const a = b.dataset.act;
-    if (a === "nypay") nyPay(); else if (a === "nysbp") toBot("nysbp"); else if (a === "nybot") toBot("ny"); else if (a === "nyrub") buy(C.nyInvoiceRub, "ny"); else if (a === "nyxtr") buy(C.nyInvoice, "ny"); else if (a === "giftbuy") toBot("gift");
+    if (a === "nypay") nyPay(); else if (a === "nysbp") toBot("nysbp"); else if (a === "nybot") toBot("ny"); else if (a === "nyrub") buy(C.nyInvoiceRub, "ny"); else if (a === "nyxtr") buy(C.nyInvoice, "ny"); else if (a === "giftbuy" || a === "giftsbp") toBot("gift"); else if (a === "giftpay") giftPay(); else if (a === "giftrub") buy(C.giftInvoiceRub, "gift"); else if (a === "giftxtr") buy(C.giftInvoice, "gift");
     else if (a === "pay") paywall(); else if (a === "buy") buy(); else if (a === "buyrub") buy(C.invoiceRub); else if (a === "buysbp") buySbp(); else if (a === "close") $("#sheet").classList.add("hidden");
     else if (a === "clearshop") { S.shop = {}; store.set("shop", "{}"); render(); }
   });
@@ -484,7 +501,7 @@ async function boot() {
   } else if (/dark/.test(location.search) || (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches)) document.documentElement.classList.add("dark");
   S.pub = await (await fetch("data/public.json?v=" + (C.v || 1))).json();
   try { S.ny = await (await fetch("data/ny_public.json?v=" + (C.v || 1))).json(); } catch (e) { S.ny = null; }
-  try { const L = await (await fetch("data/links.json?t=" + Date.now())).json(); if (L.ny) C.nyInvoice = L.ny; if (L.nyRub) C.nyInvoiceRub = L.nyRub; } catch (e) {}
+  try { const L = await (await fetch("data/links.json?t=" + Date.now())).json(); if (L.ny) C.nyInvoice = L.ny; if (L.nyRub) C.nyInvoiceRub = L.nyRub; if (L.gift) C.giftInvoice = L.gift; if (L.giftRub) C.giftInvoiceRub = L.giftRub; } catch (e) {}
   try { S.fav = JSON.parse(await store.get("fav") || "[]"); } catch (e) {}
   try { S.shop = JSON.parse(await store.get("shop") || "{}"); } catch (e) {}
   let key = null;
