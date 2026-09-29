@@ -19,6 +19,10 @@ YK = os.environ.get("YK_TOKEN", "")
 RUB = int(os.environ.get("PRICE_RUB", "1300"))
 RUB_PROMO = int(os.environ.get("PROMO_RUB", "990"))
 RUB_OLD = int(os.environ.get("OLD_RUB", "2600"))     # зачёркнутая цена — показываем только в момент оплаты
+NY_RUB = int(os.environ.get("NY_RUB", "700"))          # «Новогодний стол»
+NY_OLD = int(os.environ.get("NY_OLD_RUB", "1400"))
+NY_STARS = int(os.environ.get("NY_STARS", "350"))
+NY_KEY = base64.urlsafe_b64encode(hashlib.sha256(("book:ny:" + BOOK_KEY).encode()).digest()).decode().rstrip("=")
 YKS = os.environ.get("YK_SECRET", "").strip()          # секретный ключ ЮKassa (API) — для СБП
 YK_SHOP = os.environ.get("YK_SHOP_ID", "1476727").strip()
 BOT_NAME = os.environ.get("BOT_NAME", "BabaZoya_bot")
@@ -126,7 +130,7 @@ def write_status():
     save_state(force=True)
     body = {"message": "bot: status", "branch": "bot-state", "content": base64.b64encode(json.dumps({
         "started": datetime.datetime.now(MSK).isoformat(), "recipes": len(IDX), "club_letters": len(CLUB),
-        "ai": bool(AI_KEY), "sbp": bool(YKS), "card": bool(YK), "users": len(ST["users"]), "pdf": bool(ST.get("pdf")), "admin": bool(ST.get("admin"))}).encode()).decode()}
+        "ai": bool(AI_KEY), "sbp": bool(YKS), "card": bool(YK), "users": len(ST["users"]), "pdf": bool(ST.get("pdf")), "pdf_ny": bool(ST.get("pdf_ny")), "admin": bool(ST.get("admin"))}).encode()).decode()}
     r = gh("GET", "/contents/status.json", params={"ref": "bot-state"})
     if r.status_code == 200: body["sha"] = r.json()["sha"]
     gh("PUT", "/contents/status.json", json=body)
@@ -391,6 +395,36 @@ def greet(chat):
 def start_kb():
     return kb([B_FREE], [B_TEST])
 
+B_NY = {"text": "🎄 Новогодний стол", "callback_data": "ny"}
+
+def ny_card(chat):
+    cap = ("<b>🎄 «Новогодний стол бабы Зои»</b>\n\n"
+           "35 праздничных рецептов: оливье, шуба, холодец, утка с яблоками, пельмени, Наполеон, глинтвейн без вина.\n\n"
+           "🗓 План по дням с 28 по 31 декабря — как всё успеть и не свалиться к полуночи\n"
+           "🛒 Меню на 8 человек и список покупок\n🍽 Стол без тяжести и как хранить остатки\n\n"
+           f"<s>{NY_OLD} ₽</s>  <b>{NY_RUB} ₽</b>, в приложении и PDF в чат")
+    rows = []
+    if YKS: rows.append([{"text": f"⚡ Оплатить {NY_RUB} ₽ по СБП", "callback_data": "ny_sbp"}])
+    if YK: rows.append([{"text": "💳 Картой", "callback_data": "ny_rub"}])
+    rows.append([{"text": "⭐ Звёздами Telegram", "callback_data": "ny_xtr"}])
+    if not tg("sendPhoto", chat_id=chat, photo=APP + "img/ny/cover.jpg", caption=cap, parse_mode="HTML", reply_markup=kb(*rows)):
+        tg("sendMessage", chat_id=chat, text=cap, parse_mode="HTML", reply_markup=kb(*rows))
+
+def deliver_ny(chat, text=None):
+    tg("sendMessage", chat_id=chat, text=text or ("Спасибо, милок! «Новогодний стол» твой — насовсем.\n\n"
+        "Жми «Открыть новогоднюю книжку»: там 35 рецептов, план по дням и список покупок. Дальше она будет открываться сама, через «Книжку» внизу чата."),
+       reply_markup=kb([{"text": "🎄 Открыть новогоднюю книжку", "web_app": {"url": APP + "?n=" + NY_KEY}}]))
+    if ST.get("pdf_ny"):
+        tg("sendDocument", chat_id=chat, document=ST["pdf_ny"], caption="А это та же книжка в PDF — распечатать и повесить на холодильник план на 31-е.")
+    else:
+        tg("sendMessage", chat_id=chat, text="PDF-версию пришлю чуть позже — внучка как раз её доделывает.")
+        to_admin(f"Покупатель {chat} ждёт PDF «Новогоднего стола» — пришли файл боту с подписью «код ny».")
+
+def ny_offer(chat):
+    tg("sendMessage", chat_id=chat, reply_markup=kb([B_NY]),
+       text=("И ещё, милок. К Новому году у меня есть вторая книжка — «Новогодний стол»: 35 праздничных рецептов "
+             f"и план, как всё успеть к 31-му. Тебе, как своему, — <s>{NY_OLD} ₽</s> {NY_RUB} ₽."), parse_mode="HTML")
+
 
 # ---------- оплата ----------
 def invoice(chat, kind, cur="XTR"):
@@ -399,18 +433,21 @@ def invoice(chat, kind, cur="XTR"):
         "book": ("Бабушкин стол — 100 рецептов", "Вся книга бабы Зои: 100 деревенских рецептов для лёгкого живота, правила, меню на неделю. В приложении и PDF в чат.", "book-v1", PRICE),
         "promo": ("Бабушкин стол — со скидкой", f"Вся книга бабы Зои за {PROMO} ⭐ вместо {PRICE}. Скидка действует сутки.", "promo-v1", PROMO),
         "gift": ("Книжка «Бабушкин стол» в подарок", "Пришлю тебе открытку со ссылкой — перешлёшь её тому, кому даришь. Открыть подарок можно один раз.", "gift-v1", PRICE),
+        "ny": ("Новогодний стол бабы Зои", "35 праздничных рецептов, план по дням на 28–31 декабря, меню и список покупок. В приложении и PDF в чат.", "ny-v1", NY_STARS),
     }[kind]
     extra = {}
     if cur == "RUB":
-        amount = (RUB_PROMO if kind == "promo" else RUB) * 100
+        amount = (RUB_PROMO if kind == "promo" else NY_RUB if kind == "ny" else RUB) * 100
         desc = desc.replace(f"за {PROMO} ⭐ вместо {PRICE}", f"за {RUB_PROMO} ₽ вместо {RUB}")
         extra = {"provider_token": YK}
+    ph = {"photo_url": APP + "img/ny/cover.jpg"} if kind == "ny" else {"photo_url": APP + "img/mockup.jpg", "photo_width": 1080, "photo_height": 1935}
     tg("sendInvoice", chat_id=chat, title=title, description=desc, payload=payload, currency=cur,
-       prices=[{"label": "Книга", "amount": amount}], photo_url=APP + "img/mockup.jpg", photo_width=1080, photo_height=1935, **extra)
+       prices=[{"label": "Книга", "amount": amount}], **ph, **extra)
 
 def pay_choice(chat, kind, text):
     if not (YK or YKS): return invoice(chat, kind)
     if kind in ("book", "promo"): return book_card(chat, kind)
+    if kind == "ny": return ny_card(chat)
     rows = []
     if YKS: rows.append([{"text": "⚡ СБП — через приложение банка", "callback_data": f"{kind}_sbp"}])
     if YK: rows.append([{"text": "💳 Картой", "callback_data": f"{kind}_rub"}])
@@ -421,7 +458,7 @@ def pay_choice(chat, kind, text):
 # ---------- СБП через API ЮKassa: ссылка на страницу оплаты, бот сам проверяет статус ----------
 YK_API = "https://api.yookassa.ru/v3/payments"
 SBP_DESC = {"book": "Книга «Бабушкин стол» — 100 рецептов", "promo": "Книга «Бабушкин стол» со скидкой",
-            "gift": "Книга «Бабушкин стол» в подарок", "check": "Проверка оплаты"}
+            "gift": "Книга «Бабушкин стол» в подарок", "check": "Проверка оплаты", "ny": "Книга «Новогодний стол бабы Зои»"}
 
 def yk(method, path="", **kw):
     try:
@@ -434,7 +471,7 @@ def yk(method, path="", **kw):
 
 def sbp_pay(chat, uid, kind):
     if not YKS: return pay_choice(chat, kind if kind != "check" else "book", "Как удобнее заплатить, милок?")
-    rub = 100 if kind == "check" else RUB_PROMO if kind == "promo" else RUB
+    rub = 100 if kind == "check" else RUB_PROMO if kind == "promo" else NY_RUB if kind == "ny" else RUB
     body = {"amount": {"value": f"{rub}.00", "currency": "RUB"}, "capture": True,
             "confirmation": {"type": "redirect", "return_url": f"https://t.me/{BOT_NAME}"},
             "description": SBP_DESC[kind], "metadata": {"uid": str(uid), "chat": str(chat), "kind": kind},
@@ -450,7 +487,7 @@ def sbp_pay(chat, uid, kind):
                   reply_markup=kb([{"text": "💳 Картой", "callback_data": f"{kind}_rub"}] if YK else [B_FREE],
                                   [{"text": "⭐ Звёздами Telegram", "callback_data": f"{kind}_xtr"}]))
     ST.setdefault("yk", {})[j["id"]] = {"uid": uid, "chat": chat, "kind": kind, "t": now()}; mark(); save_state()
-    old = f"<s>{RUB_OLD} ₽</s> " if kind != "check" else ""
+    old = "" if kind == "check" else f"<s>{NY_OLD if kind == 'ny' else RUB_OLD} ₽</s> "
     tg("sendMessage", chat_id=chat, parse_mode="HTML", text=(f"Оплата по СБП — {old}<b>{rub} ₽</b>.\n\nЖми кнопку: откроется страница оплаты, выбери свой банк — "
                                           "он сам откроется, останется подтвердить. Как деньги придут, я сразу пришлю книжку сюда."),
        reply_markup=kb([{"text": f"⚡ Оплатить {rub} ₽ по СБП", "url": url}],
@@ -518,7 +555,7 @@ def on_payment(m):
     chat = m["chat"]["id"]; uid = m["from"]["id"]; u = user(uid); sp = m["successful_payment"]
     pl, amount, cur = sp.get("invoice_payload", ""), sp.get("total_amount", 0), sp.get("currency", "XTR")
     name = m["from"].get("first_name", "")
-    if pl in ("book-v1", "promo-v1", "gift-v1", "check-v1"):
+    if pl in ("book-v1", "promo-v1", "gift-v1", "check-v1", "ny-v1"):
         return grant(chat, uid, name, pl[:-3], amount, cur)
     if pl == "club-v1":
         _club_payment(m, u, sp, amount, chat, name)
@@ -529,6 +566,11 @@ def grant(chat, uid, name, kind, amount, cur, via=""):
         u["paid"] = 1; u["tp"] = now(); u["via"] = kind
         count_sale(u, kind, amount, cur); deliver(chat)
         to_admin(f"Продажа! {name or uid} купил книгу за {money(amount, cur)}{how} ({kind}, источник: {u.get('src')}).")
+        if not u.get("paid_ny"): ny_offer(chat)
+    elif kind == "ny":
+        u["paid_ny"] = 1; u["tp_ny"] = now()
+        count_sale(u, "ny", amount, cur); deliver_ny(chat)
+        to_admin(f"Продажа! {name or uid} купил «Новогодний стол» за {money(amount, cur)}{how} (источник: {u.get('src')}).")
     elif kind == "gift":
         code = "".join(random.choice("ABCDEFGHJKLMNPQRSTUVWXYZ23456789") for _ in range(8))
         ST["gifts"][code] = {"by": uid, "t": now(), "to": None}; count_sale(u, "gift", amount, cur)
@@ -650,6 +692,9 @@ def on_message(m):
     u = user(uid)
 
     # админ: загрузка PDF и регистрация
+    if m.get("document") and text in (ADMIN_CODE + " ny", "ny " + ADMIN_CODE):
+        ST["pdf_ny"] = m["document"]["file_id"]; ST["admin"] = chat; mark(); save_state()
+        return tg("sendMessage", chat_id=chat, text="Готово: PDF «Новогоднего стола» сохранила, буду отправлять покупателям.")
     if m.get("document") and text == ADMIN_CODE:
         ST["pdf"] = m["document"]["file_id"]; ST["admin"] = chat; mark(); save_state()
         return tg("sendMessage", chat_id=chat, text="Готово: PDF сохранила, буду отправлять покупателям. Уведомления о продажах — сюда.")
@@ -665,7 +710,7 @@ def on_message(m):
         arg = text[6:].strip()
         free = arg.startswith("free")
         if free: arg = arg[5:]
-        if u.get("src") == "direct" and arg and not arg.startswith("g") and arg not in ("buy", "book", "gift", "club", "sbp"):
+        if u.get("src") == "direct" and arg and not arg.startswith("g") and arg not in ("buy", "book", "gift", "club", "sbp", "ny", "nysbp"):
             u["src"] = arg[:20]; mark()
         if free:
             tg("sendMessage", chat_id=chat, text="Здравствуй, милок! Я баба Зоя 👋 Обещала рецепты даром, держи.", reply_markup=menu_kb())
@@ -674,6 +719,8 @@ def on_message(m):
             nums = [int(x) for x in arg[1:].split("_") if int(x) in LEAD]
             if nums: return send_lead(chat, uid, nums)
         if arg == "buy": return pay_choice(chat, "book", "Как удобнее заплатить, милок?")
+        if arg == "ny": return deliver_ny(chat, "Вот твоя новогодняя книжка, милок. Жми — и всё откроется.") if u.get("paid_ny") else ny_card(chat)
+        if arg == "nysbp": return sbp_pay(chat, uid, "ny")
         if arg.startswith("test"): return test_start(chat, u)
         if arg.startswith("sbp"): return sbp_pay(chat, uid, "promo" if u.get("promo", 0) > now() else "book")
         if arg == "gift": return pay_choice(chat, "gift", "Подарок — дело хорошее! Как заплатишь?")
@@ -686,6 +733,8 @@ def on_message(m):
         if has_paid(uid): return deliver(chat, "Вот твоя книжка, милок. Жми — и все рецепты откроются.")
         return tg("sendMessage", chat_id=chat, text="Покупку не нашла, милок. Если платил — напиши сюда, разберусь. А купить можно тут:", reply_markup=kb(*buy_rows()))
     if text.startswith("/buy"): return pay_choice(chat, "book", "Как удобнее заплатить, милок?")
+    if text.startswith("/ny"):
+        return deliver_ny(chat, "Вот твоя новогодняя книжка, милок. Жми — и всё откроется.") if u.get("paid_ny") else ny_card(chat)
     if text.startswith("/gift"): return pay_choice(chat, "gift", "Подарок — дело хорошее! Как заплатишь?")
     if text.startswith("/club"): return club_menu(chat, u)
     if text.startswith("/free"): return free_menu(chat)
@@ -695,6 +744,7 @@ def on_message(m):
             "Как всё устроено:\n\n• Напиши, какой продукт есть, — подберу рецепт из книжки, один в подарок.\n• /free — семь рецептов даром, пришлю прямо сюда.\n• «Книжка» внизу чата — приложение с рецептами.\n"
             "• Вся книга — по СБП, картой или звёздами, один раз и навсегда. Купил, а закрыто — /book.\n"
             "• Подарить книжку — /gift, пришлю открытку со ссылкой.\n"
+            "• 🎄 «Новогодний стол» — /ny, 35 праздничных рецептов и план на 31 декабря.\n"
             + (f"• Клуб бабы Зои — /club, письмо с новым рецептом каждую неделю, {CLUB_PRICE} ⭐ в месяц.\n" if CLUB else "")
             + "• У кого книжка — может спрашивать меня прямо здесь, что приготовить.\n\n"
             "Рецепты — домашняя еда, а не лечение. Если есть болезни желудка, аллергия на мёд, беременность — посоветуйся с врачом."))
@@ -783,7 +833,10 @@ def on_callback(c):
     elif d == "gift": pay_choice(chat, "gift", "Подарок — дело хорошее! Как заплатишь?")
     elif d == "gift_xtr": invoice(chat, "gift")
     elif d == "gift_rub": invoice(chat, "gift", "RUB")
-    elif d in ("book_sbp", "gift_sbp"): sbp_pay(chat, uid, d[:-4])
+    elif d in ("book_sbp", "gift_sbp", "ny_sbp"): sbp_pay(chat, uid, d[:-4])
+    elif d == "ny": ny_card(chat) if not u.get("paid_ny") else deliver_ny(chat, "Эта книжка у тебя уже есть, милок. Жми — и всё откроется.")
+    elif d == "ny_xtr": invoice(chat, "ny")
+    elif d == "ny_rub": invoice(chat, "ny", "RUB")
     elif d == "promo_sbp":
         if u.get("promo", 0) > now(): sbp_pay(chat, uid, "promo")
         else: tg("sendMessage", chat_id=chat, text="Скидка уже закончилась, милок. Но книжка всё там же:", reply_markup=kb(*buy_rows()))
@@ -811,8 +864,8 @@ def on_callback(c):
 def on_precheckout(q):
     pl = q.get("invoice_payload"); uid = q["from"]["id"]
     cur = q.get("currency"); amt = q.get("total_amount", 0)
-    ok = pl in ("book-v1", "promo-v1", "gift-v1", "club-v1") and (cur == "XTR" or (cur == "RUB" and YK and pl != "club-v1"))
-    if ok and cur == "RUB": ok = amt == (RUB_PROMO if pl == "promo-v1" else RUB) * 100
+    ok = pl in ("book-v1", "promo-v1", "gift-v1", "club-v1", "ny-v1") and (cur == "XTR" or (cur == "RUB" and YK and pl != "club-v1"))
+    if ok and cur == "RUB": ok = amt == (RUB_PROMO if pl == "promo-v1" else NY_RUB if pl == "ny-v1" else RUB) * 100
     if pl == "check-v1" and cur == "RUB" and 0 < amt <= 10000: ok = True
     err = "Что-то не так со счётом, попробуй ещё раз из бота."
     if pl == "promo-v1" and user(uid).get("promo", 0) + 1800 < now():
