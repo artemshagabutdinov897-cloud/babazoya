@@ -22,8 +22,9 @@ jobs:
           OUT: ${{ inputs.path }}
           W: ${{ inputs.width }}
         run: |
+          pip install -q pillow
           curl -sSL -o /tmp/src "$URL"
-          ffmpeg -hide_banner -loglevel error -y -i /tmp/src -vf "scale=${W}:-2" -q:v 3 "$OUT"
+          python3 -c "import os; from PIL import Image; im=Image.open('/tmp/src').convert('RGB'); w=int(os.environ['W']); im=im.resize((w, round(im.height*w/im.width)), Image.LANCZOS); im.save(os.environ['OUT'], quality=85, optimize=True, progressive=True)"
           ls -la "$OUT"
           git config user.name "artemshagabutdinov897-cloud"
           git config user.email "artemshagabutdinov897@gmail.com"
