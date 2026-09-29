@@ -1,0 +1,54 @@
+name: ny-seal
+on:
+  workflow_dispatch:
+    inputs:
+      blob:
+        description: "gzip+base64 JSON книги (читается из файла события, в лог не пишется)"
+        required: true
+      img:
+        description: "URL обложки"
+        required: false
+        default: ""
+permissions:
+  contents: write
+jobs:
+  seal:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pip install -q cryptography pillow
+      - name: seal
+        env:
+          BOOK_KEY: ${{ secrets.BOOK_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os, json, gzip, base64, hashlib, urllib.request
+          from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+          ev = json.load(open(os.environ["GITHUB_EVENT_PATH"]))["inputs"]
+          data = gzip.decompress(base64.b64decode(ev["blob"]))
+          json.loads(data)
+          k = hashlib.sha256(("book:ny:" + os.environ["BOOK_KEY"]).encode()).digest()
+          iv = os.urandom(12)
+          open("data/ny.enc", "wb").write(iv + AESGCM(k).encrypt(iv, data, None))
+          print("sealed", len(data))
+          url = ev.get("img") or ""
+          if url:
+              from PIL import Image
+              urllib.request.urlretrieve(url, "/tmp/cover")
+              im = Image.open("/tmp/cover").convert("RGB")
+              f = im.width / 1856
+              os.makedirs("img/ny", exist_ok=True)
+              boxes = {"cover": ((0, 0, 1856, 2304), 1080), "face": ((650, 200, 1750, 1300), 600),
+                       "ch1": ((100, 1330, 1400, 2130), 1000), "ch2": ((0, 1700, 1050, 2304), 1000),
+                       "ch3": ((0, 850, 1856, 1700), 1000), "ch4": ((880, 1650, 1856, 2304), 1000),
+                       "ch5": ((100, 450, 900, 1450), 800)}
+              for name, (b, w) in boxes.items():
+                  c = im.crop(tuple(int(v * f) for v in b))
+                  c.resize((w, round(c.height * w / c.width)), Image.LANCZOS).save(f"img/ny/{name}.jpg", quality=84, optimize=True, progressive=True)
+              print("images ok")
+          PY
+          git config user.name "artemshagabutdinov897-cloud"
+          git config user.email "artemshagabutdinov897@gmail.com"
+          git add data/ny.enc img/ny || true
+          git commit -m "Новогодний стол: зашифрованная книга и картинки" || true
+          git pull -q --rebase && git push
