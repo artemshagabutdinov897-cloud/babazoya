@@ -400,9 +400,10 @@ function nyPay() {
   <div class="kick">Новогодняя книжка</div><h2>Новогодний стол</h2>
   <ul><li>35 праздничных рецептов: оливье, шуба, холодец, утка, пельмени, Наполеон</li><li>План по дням с 28 по 31 декабря — как всё успеть</li><li>Меню на 8 человек и список покупок</li><li>Стол без тяжести и как хранить остатки</li><li>PDF-книжка — в чат</li></ul>
   ${C.sbp ? `<button class="btn" data-act="nysbp">⚡ СБП — через приложение банка</button><div style="height:8px"></div>` : ""}
-  <button class="btn${C.sbp ? " ghost" : ""}" data-act="nybot">💳 Картой или ⭐ звёздами</button>
+  ${C.nyInvoiceRub ? `<button class="btn${C.sbp ? " ghost" : ""}" data-act="nyrub">💳 Картой</button>` : ""}
+  ${C.nyInvoice ? `<button class="btn ghost" style="margin-top:8px" data-act="nyxtr">⭐ Звёздами Telegram</button>` : `<button class="btn${C.sbp ? " ghost" : ""}" data-act="nybot">💳 Картой или ⭐ звёздами</button>`}
   <button class="btn ghost" style="margin-top:8px" data-act="close">Позже</button>
-  <small>Оплата в боте бабы Зои. Книжка откроется здесь навсегда.</small></div></div>`;
+  <small>${C.nyInvoice ? "Оплата картой и звёздами — прямо здесь, по СБП — через бота." : "Оплата в боте бабы Зои."} Книжка откроется здесь навсегда.</small></div></div>`;
   sh.classList.remove("hidden");
   sh.onclick = e => { if (e.target === sh) sh.classList.add("hidden"); };
   bind(sh);
@@ -413,11 +414,11 @@ function toBot(start) {
   if (TG) { try { TG.openTelegramLink(link); setTimeout(() => { try { TG.close(); } catch (e) {} }, 400); return; } catch (e) {} }
   location.href = link;
 }
-function buy(link) {
+function buy(link, kind) {
   link = link || C.invoice;
   if (!TG || !link) { toast("Открой книжку из бота @" + (C.bot || "")); return; }
   haptic();
-  try { TG.openInvoice(link, onPaid); }
+  try { TG.openInvoice(link, st => onPaid(st, kind)); }
   catch (e) {
     try { TG.openTelegramLink(link); } catch (e2) { toast("Не открылась оплата: " + (e2.message || e.message || e)); }
   }
@@ -428,10 +429,12 @@ function buySbp() {
   try { TG.openTelegramLink(link); setTimeout(() => { try { TG.close(); } catch (e) {} }, 400); }
   catch (e) { location.href = link; }
 }
-function onPaid(status) {
+function onPaid(status, kind) {
     if (status === "paid") {
       $("#sheet").classList.add("hidden");
-      TG.showAlert("Спасибо, милок! Баба Зоя прислала в чат книжку и кнопку «Открыть книжку». Нажми её — и все рецепты откроются.", () => TG.close());
+      TG.showAlert(kind === "ny"
+        ? "Спасибо, милок! «Новогодний стол» твой. Баба Зоя прислала в чат кнопку «Открыть новогоднюю книжку» — нажми её, и всё откроется."
+        : "Спасибо, милок! Баба Зоя прислала в чат книжку и кнопку «Открыть книжку». Нажми её — и все рецепты откроются.", () => TG.close());
     } else if (status === "failed") toast("Оплата не прошла, попробуй ещё раз");
 }
 
@@ -462,7 +465,7 @@ function bind(root) {
   });
   root.querySelectorAll("[data-act]").forEach(b => b.onclick = () => {
     const a = b.dataset.act;
-    if (a === "nypay") nyPay(); else if (a === "nysbp") toBot("nysbp"); else if (a === "nybot") toBot("ny"); else if (a === "giftbuy") toBot("gift");
+    if (a === "nypay") nyPay(); else if (a === "nysbp") toBot("nysbp"); else if (a === "nybot") toBot("ny"); else if (a === "nyrub") buy(C.nyInvoiceRub, "ny"); else if (a === "nyxtr") buy(C.nyInvoice, "ny"); else if (a === "giftbuy") toBot("gift");
     else if (a === "pay") paywall(); else if (a === "buy") buy(); else if (a === "buyrub") buy(C.invoiceRub); else if (a === "buysbp") buySbp(); else if (a === "close") $("#sheet").classList.add("hidden");
     else if (a === "clearshop") { S.shop = {}; store.set("shop", "{}"); render(); }
   });
@@ -481,6 +484,7 @@ async function boot() {
   } else if (/dark/.test(location.search) || (window.matchMedia && matchMedia("(prefers-color-scheme: dark)").matches)) document.documentElement.classList.add("dark");
   S.pub = await (await fetch("data/public.json?v=" + (C.v || 1))).json();
   try { S.ny = await (await fetch("data/ny_public.json?v=" + (C.v || 1))).json(); } catch (e) { S.ny = null; }
+  try { const L = await (await fetch("data/links.json?t=" + Date.now())).json(); if (L.ny) C.nyInvoice = L.ny; if (L.nyRub) C.nyInvoiceRub = L.nyRub; } catch (e) {}
   try { S.fav = JSON.parse(await store.get("fav") || "[]"); } catch (e) {}
   try { S.shop = JSON.parse(await store.get("shop") || "{}"); } catch (e) {}
   let key = null;
