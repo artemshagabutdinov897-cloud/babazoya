@@ -881,6 +881,12 @@ def main():
     print(f"bot started: users={len(ST['users'])} recipes={len(IDX)} club={len(CLUB)}", flush=True)
     try: write_status()
     except Exception: traceback.print_exc()
+    try:  # профиль бота: текст до кнопки «Запустить» и строка «О боте»
+        tg("setMyDescription", description=("Здравствуй, милок! Я баба Зоя.\n"
+            "Дарю 7 деревенских рецептов: квашеная капуста, огурцы за сутки, овсяный кисель, медовая вода.\n"
+            "Жми «Запустить» 👇"))
+        tg("setMyShortDescription", short_description="Деревенские рецепты для лёгкого живота. Книжка «Бабушкин стол» 📖")
+    except Exception: traceback.print_exc()
     deadline = time.time() + RUN_SECONDS; offset = None; last_tick = 0
     while time.time() < deadline and not STOP:
         ups = tg("getUpdates", timeout=max(1, min(15 if ST.get("yk") else 25, int(deadline - time.time()))), offset=offset,
