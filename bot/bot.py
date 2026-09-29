@@ -217,6 +217,36 @@ def teaser(r):
                   "Там все 100 рецептов, а спрашивать меня можно сколько хочешь."]
     return "\n".join(lines)
 
+def recipe_card(n):
+    """Фото главы + подпись с рецептом. Если рецепт длиннее подписи (1024), остаток — отдельным сообщением."""
+    r = next((x for x in BOOK.get("recipes", []) if str(x["n"]) == str(n)), None)
+    if not r: return None
+    e = html.escape
+    head = [f"<b>{e(r['title'])}</b>"]
+    if r.get("intro"): head.append(f"<i>{e(r['intro'])}</i>")
+    meta = " · ".join(x for x in [f"⏱ {e(r['time'])}" if r.get("time") else "", f"🫙 {e(r['yield'])}" if r.get("yield") else ""] if x)
+    if meta: head += ["", meta]
+    body = ["<b>Что нужно</b>"] + [f"• {e(x)}" for x in r.get("ing") or []]
+    body += ["", "<b>Как делаю</b>"] + [f"{i + 1}. {e(x)}" for i, x in enumerate(r.get("steps") or [])]
+    if r.get("tip"): body += ["", f"<blockquote>💡 <b>Совет бабы Зои:</b> {e(r['tip'])}</blockquote>"]
+    if r.get("warn") and r["warn"] != "None": body += [f"⚠️ {e(r['warn'])}"]
+    photo = APP + f"img/ch{r.get('ch', 1)}.jpg"
+    full = "\n".join(head + [""] + body)
+    if len(full) <= 1000: return photo, full, None
+    return photo, "\n".join(head), "\n".join(body)
+
+def send_card(chat, n, markup=None):
+    c = recipe_card(n)
+    if not c: return False
+    photo, cap, rest = c
+    if rest is None:
+        ok = tg("sendPhoto", chat_id=chat, photo=photo, caption=cap, parse_mode="HTML", reply_markup=markup)
+        if not ok: tg("sendMessage", chat_id=chat, text=cap, parse_mode="HTML", reply_markup=markup)
+    else:
+        tg("sendPhoto", chat_id=chat, photo=photo, caption=cap, parse_mode="HTML")
+        tg("sendMessage", chat_id=chat, text=rest, parse_mode="HTML", reply_markup=markup)
+    return True
+
 def recipe_message(n):
     r = next((x for x in BOOK.get("recipes", []) if str(x["n"]) == str(n)), None)
     if not r: return None
@@ -265,12 +295,11 @@ def send_letter(chat, i):
 
 
 # ---------- тексты и кнопки ----------
-HELLO = ("Здравствуй, милок! Я баба Зоя.\n\n"
-         "Всю жизнь кормлю людей простой деревенской едой — такой, после которой в животе легко, а не тяжело. "
-         "Собрала всё в одну книжку: «Бабушкин стол», 100 рецептов — квашеная капуста, хлеб на закваске, кисели, "
-         "каши, щи, мёд с пасеки и праздничный стол без тяжести.\n\n"
-         "Напиши мне, какой продукт у тебя есть — тыква, капуста, гречка, яблоки, — и я подберу рецепт из книжки. Один — в подарок. "
-         "А ещё семь рецептов дарю просто так — жми «7 рецептов даром».")
+HELLO = ("<b>Здравствуй, милок!</b> 👋\n"
+         "Я баба Зоя. Всю жизнь кормлю людей простой деревенской едой, после которой в животе легко, а не тяжело.\n\n"
+         "Для начала дарю тебе <b>7 рецептов</b>: квашеную капусту, огурцы за сутки, овсяный кисель, медовую воду.\n\n"
+         "А если напишешь, какой продукт у тебя есть, подберу, что из него приготовить.")
+HELLO_PLAIN = "Здравствуй, милок! 👋"
 THANKS = ("Спасибо, милок! Книжка твоя — насовсем.\n\n"
           "Нажми «Открыть всю книжку» — откроются все 100 рецептов, правила, меню на неделю и таблицы. "
           "Дальше она будет открываться сама, через кнопку «Книжка» внизу чата.\n\n"
@@ -287,42 +316,80 @@ def money(amount, cur):
     return f"{amount // 100} ₽" if cur == "RUB" else f"{amount} ⭐"
 B_GIFT = {"text": "🎁 Подарить книжку", "callback_data": "gift"}
 B_CLUB = {"text": "✉️ Клуб бабы Зои", "callback_data": "club"}
-B_FREE = {"text": "🎁 7 рецептов даром", "callback_data": "free"}
+B_FREE = {"text": "🎁 Забрать 7 рецептов", "callback_data": "free"}
+B_TEST = {"text": "🥣 Тест: какой у тебя живот", "callback_data": "test"}
+M_BOOK, M_FREE, M_ASK = "📖 Книжка", "🎁 Рецепты", "💬 Спросить"
+def menu_kb():
+    return {"keyboard": [[{"text": M_BOOK, "web_app": {"url": APP}}, {"text": M_FREE}, {"text": M_ASK}]],
+            "resize_keyboard": True, "is_persistent": True}
+EMO = {1: "🥬", 4: "🍎", 7: "🥒", 8: "🟣", 11: "🥕", 41: "🍯", 56: "🥣"}
+SHORT = {1: "Капуста", 4: "Мочёные яблоки", 7: "Огурцы", 8: "Свекольный квас", 11: "Морковь", 41: "Медовая вода", 56: "Овсяный кисель"}
 FREE = [1, 7, 8, 4, 11, 41, 56]
 # рецепты-подарки по кодовым словам из Instagram (ссылка вида ?start=r22 или ?start=r21_22)
 LEAD = {4, 7, 8, 21, 22, 41, 42, 56, 57, 64}
 
 def send_lead(chat, uid, nums):
     u = user(uid); got = set(u.get("lead", []))
-    tg("sendMessage", chat_id=chat, text="Здравствуй, милок! Я баба Зоя. Обещала рецепт — держи 👇")
+    tg("sendMessage", chat_id=chat, text="Здравствуй, милок! Я баба Зоя 👋 Обещала рецепт, держи.", reply_markup=menu_kb())
     for n in nums:
-        msg = recipe_message(n)
-        if msg:
-            got.add(n); tg("sendMessage", chat_id=chat, text=msg, parse_mode="HTML")
+        if send_card(chat, n): got.add(n)
     u["lead"] = sorted(got); mark()
     tg("sendMessage", chat_id=chat, reply_markup=kb([B_FREE], *buy_rows(), [B_OPEN]),
        text=("Это один рецепт из моей книжки «Бабушкин стол». Там их сто — капуста, хлеб, кисели, каши, мёд с пасеки.\n\n"
              "Ещё семь дарю просто так — жми «7 рецептов даром». А напишешь, какой продукт у тебя есть, — подберу, что приготовить."))
 
 def free_menu(chat):
-    rows = []
-    for n in FREE:
-        r = next((x for x in BOOK.get("recipes", []) if str(x["n"]) == str(n)), None)
-        if r: rows.append([{"text": r["title"], "callback_data": f"fr_{n}"}])
-    tg("sendMessage", chat_id=chat, reply_markup=kb(*rows),
-       text="Выбирай, милок, какой рецепт прислать. Все семь — даром, и в приложении они тоже открыты.")
+    btns = [{"text": f"{EMO.get(n, '🍽')} {SHORT.get(n, '')}".strip(), "callback_data": f"fr_{n}"} for n in FREE]
+    rows = [btns[i:i + 2] for i in range(0, len(btns), 2)]
+    tg("sendMessage", chat_id=chat, reply_markup=kb(*rows), text="Выбирай, милок, с чего начнём 👇")
 
 def send_free(chat, uid, n):
-    msg = recipe_message(n)
-    if not msg: return
-    u = user(uid); got = set(u.get("free", [])); got.add(n); u["free"] = sorted(got); mark()
-    tg("sendMessage", chat_id=chat, text=msg, parse_mode="HTML",
-       reply_markup=kb([{"text": "Ещё рецепт даром", "callback_data": "free"}], *buy_rows()))
+    u = user(uid); got = set(u.get("free", [])); got.add(n); u["free"] = sorted(got)
+    u.setdefault("tf", now()); mark()
+    nxt = next((x for x in FREE if x not in got), None)
+    rows = ([[{"text": "➡️ Следующий рецепт", "callback_data": f"fr_{nxt}"}]] if nxt else []) + \
+           [[{"text": "📖 Вся книжка: 100 рецептов", "callback_data": "card"}]]
+    send_card(chat, n, kb(*rows))
+
+def book_card(chat, kind="book"):
+    old, new = RUB_OLD, (RUB_PROMO if kind == "promo" else RUB)
+    cap = ("<b>«Бабушкин стол»: 100 рецептов</b>\n\n"
+           "🥬 Живые заготовки\n🔥 Печка: хлеб и пироги\n🍯 Пасека: мёд и перга\n🥣 Каши, кисели, взвары\n"
+           "🍲 Супы и простая еда\n🎄 Праздничный стол без тяжести\n\n"
+           "+ меню на неделю, таблицы, и спрашивать меня можно сколько хочешь.\n\n"
+           f"<s>{old} ₽</s>  <b>{new} ₽</b>, один раз и навсегда")
+    rows = []
+    if YKS: rows.append([{"text": f"⚡ Оплатить {new} ₽ по СБП", "callback_data": f"{kind}_sbp"}])
+    if YK: rows.append([{"text": "💳 Картой", "callback_data": f"{kind}_rub"}])
+    rows.append([{"text": "⭐ Звёздами Telegram", "callback_data": f"{kind}_xtr"}])
+    if kind == "book": rows.append([B_GIFT])
+    if not tg("sendPhoto", chat_id=chat, photo=APP + "img/cover.jpg", caption=cap, parse_mode="HTML", reply_markup=kb(*rows)):
+        tg("sendMessage", chat_id=chat, text=cap, parse_mode="HTML", reply_markup=kb(*rows))
+
+HELLO_NOTE = os.path.join(ROOT, "img", "hello.mp4")
+
+def greet(chat):
+    note = ST.get("hello_note")
+    if note:
+        ok = tg("sendVideoNote", chat_id=chat, video_note=note, reply_markup=menu_kb())
+    elif os.path.exists(HELLO_NOTE):
+        ok = None
+        try:
+            r = S.post(API + "sendVideoNote", data={"chat_id": chat, "length": 640, "reply_markup": json.dumps(menu_kb())},
+                       files={"video_note": ("hello.mp4", open(HELLO_NOTE, "rb"), "video/mp4")}, timeout=120).json()
+            if r.get("ok"):
+                ok = r["result"]; ST["hello_note"] = r["result"]["video_note"]["file_id"]; mark()
+        except Exception as e:
+            print("video note upload failed", e, flush=True)
+    else:
+        ok = None
+    if not ok:
+        tg("sendMessage", chat_id=chat, text=HELLO_PLAIN, reply_markup=menu_kb())
+    if not tg("sendPhoto", chat_id=chat, photo=APP + "img/mockup.jpg", caption=HELLO, parse_mode="HTML", reply_markup=start_kb()):
+        tg("sendMessage", chat_id=chat, text=HELLO, parse_mode="HTML", reply_markup=start_kb())
 
 def start_kb():
-    rows = [[B_FREE], [{"text": "🥣 Какой у меня живот? Тест", "callback_data": "test"}], [B_OPEN]] + buy_rows() + [[B_GIFT]]
-    if CLUB: rows.append([B_CLUB])
-    return kb(*rows)
+    return kb([B_FREE], [B_TEST])
 
 
 # ---------- оплата ----------
@@ -343,6 +410,7 @@ def invoice(chat, kind, cur="XTR"):
 
 def pay_choice(chat, kind, text):
     if not (YK or YKS): return invoice(chat, kind)
+    if kind in ("book", "promo"): return book_card(chat, kind)
     rows = []
     if YKS: rows.append([{"text": "⚡ СБП — через приложение банка", "callback_data": f"{kind}_sbp"}])
     if YK: rows.append([{"text": "💳 Картой", "callback_data": f"{kind}_rub"}])
@@ -600,7 +668,7 @@ def on_message(m):
         if u.get("src") == "direct" and arg and not arg.startswith("g") and arg not in ("buy", "book", "gift", "club", "sbp"):
             u["src"] = arg[:20]; mark()
         if free:
-            tg("sendMessage", chat_id=chat, text="Здравствуй, милок! Я баба Зоя. Обещала рецепты даром — держи, выбирай.")
+            tg("sendMessage", chat_id=chat, text="Здравствуй, милок! Я баба Зоя 👋 Обещала рецепты даром, держи.", reply_markup=menu_kb())
             return free_menu(chat)
         if re.fullmatch(r"r\d+(_\d+)*", arg):
             nums = [int(x) for x in arg[1:].split("_") if int(x) in LEAD]
@@ -613,9 +681,7 @@ def on_message(m):
         if arg.startswith("g") and len(arg) == 9 and arg != "gift": return redeem(chat, uid, arg[1:], m)
         if arg == "book": text = "/book"
         else:
-            if not tg("sendPhoto", chat_id=chat, photo=APP + "img/mockup.jpg", caption=HELLO, reply_markup=start_kb()):
-                tg("sendMessage", chat_id=chat, text=HELLO, reply_markup=start_kb())
-            return
+            return greet(chat)
     if text.startswith("/book"):
         if has_paid(uid): return deliver(chat, "Вот твоя книжка, милок. Жми — и все рецепты откроются.")
         return tg("sendMessage", chat_id=chat, text="Покупку не нашла, милок. Если платил — напиши сюда, разберусь. А купить можно тут:", reply_markup=kb(*buy_rows()))
@@ -633,6 +699,13 @@ def on_message(m):
             + "• У кого книжка — может спрашивать меня прямо здесь, что приготовить.\n\n"
             "Рецепты — домашняя еда, а не лечение. Если есть болезни желудка, аллергия на мёд, беременность — посоветуйся с врачом."))
     if text.startswith("/"): return
+
+    if text == M_FREE: return free_menu(chat)
+    if text == M_ASK:
+        return tg("sendMessage", chat_id=chat, text="Напиши, милок, какие продукты у тебя есть или что хочешь приготовить, подскажу 👇")
+    if text == M_BOOK:
+        if has_paid(uid): return deliver(chat, "Вот твоя книжка, милок. Жми, и все рецепты откроются.")
+        return book_card(chat, "promo" if u.get("promo", 0) > now() else "book")
 
     # отзыв после просьбы
     if u.get("revs") == "wait" and (m.get("photo") or text):
@@ -725,6 +798,7 @@ def on_callback(c):
         else: tg("sendMessage", chat_id=chat, text="Скидка уже закончилась, милок. Но книжка всё там же:", reply_markup=kb(*buy_rows()))
     elif d == "club": club_menu(chat, u)
     elif d == "free": free_menu(chat)
+    elif d == "card": book_card(chat, "promo" if u.get("promo", 0) > now() else "book")
     elif d.startswith("fr_") and d[3:].isdigit() and int(d[3:]) in FREE: send_free(chat, uid, int(d[3:]))
     elif d.startswith("cl_") and in_club(u):
         i = int(d[3:])
@@ -757,9 +831,8 @@ def periodic():
         if not u.get("paid") and not in_club(u):
             if not u.get("d1") and t - u["t0"] > DAY:
                 u["d1"] = t; mark(); sent += 1
-                msg = recipe_message(26) or ""
-                tg("sendMessage", chat_id=chat, parse_mode="HTML", reply_markup=kb(*buy_rows(), [B_OPEN]),
-                   text="Милок, обещала ещё рецепт — держи, мой любимый пирог 🥧\n\n" + msg + "\n\nА ещё 92 таких — в книжке.")
+                tg("sendMessage", chat_id=chat, text="Милок, ну как, попробовал что-нибудь из моих рецептов? 😊\nДержи ещё один, мой любимый 👇")
+                send_card(chat, 26, kb([{"text": "📖 Вся книжка: 100 рецептов", "callback_data": "card"}]))
             elif u.get("d1") and not u.get("d2") and t - u["d1"] > 2 * DAY:
                 u["d2"] = t; u["promo"] = t + DAY; mark(); sent += 1
                 pk = kb([{"text": "Взять со скидкой", "callback_data": "promo"}])
