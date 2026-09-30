@@ -695,6 +695,10 @@ def on_message(m):
     if m.get("document") and text in (ADMIN_CODE + " ny", "ny " + ADMIN_CODE):
         ST["pdf_ny"] = m["document"]["file_id"]; ST["admin"] = chat; mark(); save_state()
         return tg("sendMessage", chat_id=chat, text="Готово: PDF «Новогоднего стола» сохранила, буду отправлять покупателям.")
+    doc = m.get("document") or {}
+    if doc and chat == admin_id() and ("новогодн" in (doc.get("file_name") or "").lower() or text.lower() in ("ny", "нг", "новогодний")):
+        ST["pdf_ny"] = doc["file_id"]; mark(); save_state()
+        return tg("sendMessage", chat_id=chat, text="Готово: PDF «Новогоднего стола» сохранила, буду отправлять покупателям.")
     if m.get("document") and text == ADMIN_CODE:
         ST["pdf"] = m["document"]["file_id"]; ST["admin"] = chat; mark(); save_state()
         return tg("sendMessage", chat_id=chat, text="Готово: PDF сохранила, буду отправлять покупателям. Уведомления о продажах — сюда.")
