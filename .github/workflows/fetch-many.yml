@@ -1,0 +1,30 @@
+name: fetch-many
+on:
+  workflow_dispatch:
+    inputs:
+      list:
+        description: "строки вида: путь url"
+        required: true
+permissions:
+  contents: write
+concurrency:
+  group: fetch-many
+  cancel-in-progress: false
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          LIST: ${{ inputs.list }}
+        run: |
+          echo "$LIST" | tr ';' '\n' | while read -r dest url; do
+            [ -z "$dest" ] && continue
+            case "$dest" in _tmp/*) ;; *) echo "skip $dest"; continue;; esac
+            mkdir -p "$(dirname "$dest")"; curl -sSfL -o "$dest" "$url" && ls -la "$dest"
+          done
+          git config user.name "artemshagabutdinov897-cloud"
+          git config user.email "artemshagabutdinov897@gmail.com"
+          git add _tmp
+          git commit -m "tmp assets" || exit 0
+          for i in 1 2 3; do git pull -q --rebase && git push && break; sleep 5; done
