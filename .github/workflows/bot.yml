@@ -26,12 +26,16 @@ jobs:
           CLUB_KEY: ${{ secrets.CLUB_KEY }}
           BRATUHA_API_KEY: ${{ secrets.BRATUHA_API_KEY }}
           GH_TOKEN: ${{ github.token }}
-          PRICE_STARS: "600"
-          PROMO_STARS: "450"
+          PRICE_STARS: "225"
+          PROMO_STARS: "180"
           CLUB_STARS: "100"
           YK_TOKEN: ${{ secrets.YK_TOKEN_LIVE }}
           YK_SECRET: ${{ secrets.YK_SECRET }}
           YK_SHOP_ID: "1476727"
-          PRICE_RUB: "1300"
-          PROMO_RUB: "990"
+          PRICE_RUB: "490"
+          PROMO_RUB: "390"
+          OLD_RUB: "1300"
+          NY_RUB: "290"
+          NY_OLD_RUB: "700"
+          NY_STARS: "135"
         run: python bot/bot.py
