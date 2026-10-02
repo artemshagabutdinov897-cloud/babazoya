@@ -12,10 +12,12 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           YK_TOKEN: ${{ secrets.YK_TOKEN_LIVE }}
-          NY_RUB: "700"
-          NY_STARS: "350"
-          GIFT_RUB: "1300"
-          GIFT_STARS: "600"
+          NY_RUB: "290"
+          NY_STARS: "135"
+          GIFT_RUB: "490"
+          GIFT_STARS: "225"
+          BOOK_RUB: "490"
+          BOOK_STARS: "225"
         run: |
           python3 - <<'PY'
           import os, json, urllib.request
@@ -39,6 +41,20 @@ jobs:
           out["gift"] = call(currency="XTR", prices=[{"label": "Книга", "amount": int(os.environ["GIFT_STARS"])}], **g)
           if YK:
               out["giftRub"] = call(currency="RUB", provider_token=YK, prices=[{"label": "Книга", "amount": int(os.environ["GIFT_RUB"]) * 100}], **g)
+          bk = dict(title="Бабушкин стол — 100 рецептов",
+                    description="Вся книга бабы Зои: 100 деревенских рецептов для лёгкого живота, правила, меню на неделю. В приложении и PDF в чат.",
+                    payload="book-v1", photo_url=APP + "img/mockup.jpg", photo_width=1080, photo_height=1935)
+          out["book"] = call(currency="XTR", prices=[{"label": "Книга", "amount": int(os.environ["BOOK_STARS"])}], **bk)
+          if YK:
+              out["bookRub"] = call(currency="RUB", provider_token=YK, prices=[{"label": "Книга", "amount": int(os.environ["BOOK_RUB"]) * 100}], **bk)
+          import re
+          c = open("config.js", encoding="utf-8").read()
+          c = re.sub(r'invoice: "[^"]*"', 'invoice: "' + out["book"] + '"', c)
+          if "bookRub" in out: c = re.sub(r'invoiceRub: "[^"]*"', 'invoiceRub: "' + out["bookRub"] + '"', c)
+          c = re.sub(r'price: "[^"]*"', 'price: "' + os.environ["BOOK_STARS"] + ' ⭐"', c)
+          c = re.sub(r'priceRub: "[^"]*"', 'priceRub: "' + os.environ["BOOK_RUB"] + ' ₽"', c)
+          c = re.sub(r'v: (\d+)', lambda m: "v: " + str(int(m.group(1)) + 1), c)
+          open("config.js", "w", encoding="utf-8").write(c)
           os.makedirs("data", exist_ok=True)
           json.dump(out, open("data/links.json", "w"), ensure_ascii=False)
           print("links:", ", ".join(out))
@@ -47,6 +63,6 @@ jobs:
         run: |
           git config user.name "artemshagabutdinov897-cloud"
           git config user.email "artemshagabutdinov897@gmail.com"
-          git add data/links.json
+          git add data/links.json config.js
           git commit -m "Ссылки на оплату в мини-аппе" || exit 0
           for i in 1 2 3; do git pull -q --rebase && git push && break; sleep 5; done
