@@ -1,0 +1,25 @@
+name: gradus-keys
+# Передаёт ключи ЮKassa из секретов этого репозитория на сервер бота «Градус дома» (@GradusDoma_bot).
+# GRADUS_BRIDGE_KEY пускает только в приёмник /usr/local/sbin/gradus-set-secrets на сервере:
+# он умеет лишь записать YK_* в /opt/gradus/.env и перезапустить бота. Значения нигде не печатаются.
+# Обновил ключ в Secrets — запусти этот workflow ещё раз.
+on: workflow_dispatch
+permissions: {}
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - name: ЮKassa -> сервер «Градус дома»
+        env:
+          BRIDGE_KEY: ${{ secrets.GRADUS_BRIDGE_KEY }}
+          YK_SECRET: ${{ secrets.YK_SECRET }}
+          YK_PROVIDER_TOKEN: ${{ secrets.GRADUS_YK_PROVIDER_TOKEN }}
+        run: |
+          umask 077
+          printf '%s\n' "$BRIDGE_KEY" > bridge_key
+          {
+            echo "YK_SHOP_ID=1476727"
+            echo "YK_SECRET=$YK_SECRET"
+            if [ -n "$YK_PROVIDER_TOKEN" ]; then echo "YK_PROVIDER_TOKEN=$YK_PROVIDER_TOKEN"; fi
+          } | ssh -i bridge_key -o StrictHostKeyChecking=accept-new -o BatchMode=yes root@109.71.240.55
+          rm -f bridge_key
